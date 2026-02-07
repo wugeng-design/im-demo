@@ -68,6 +68,28 @@ class ImSdkConfig {
     );
   }
 
+  /// conversations.im 公共服务器配置
+  /// 使用 STARTTLS (useTls=false)，不是 DirectTLS
+  factory ImSdkConfig.conversationsIm() {
+    return const ImSdkConfig(
+      host: 'conversations.im',
+      port: 5222,
+      domain: 'conversations.im',
+      useTls: false, // STARTTLS，不是 DirectTLS
+    );
+  }
+
+  /// jabber.de 公共服务器配置
+  /// 使用 STARTTLS (useTls=false)，不是 DirectTLS
+  factory ImSdkConfig.jabberDe() {
+    return const ImSdkConfig(
+      host: 'jabber.de',
+      port: 5222,
+      domain: 'jabber.de',
+      useTls: false, // STARTTLS，不是 DirectTLS
+    );
+  }
+
   /// 从 JSON 创建
   factory ImSdkConfig.fromJson(Map<String, dynamic> json) {
     return ImSdkConfig(

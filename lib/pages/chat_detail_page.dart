@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/im_provider.dart';
@@ -9,6 +10,7 @@ import '../sdk/models/media.dart';
 import '../theme/im_design_tokens.dart';
 import '../widgets/message_bubbles/message_bubbles.dart';
 import '../widgets/input/input.dart';
+import 'group_detail_page.dart';
 
 /// 聊天详情页面
 class ChatDetailPage extends ConsumerStatefulWidget {
@@ -33,6 +35,12 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
 
   /// 触发加载更多的滚动阈值（距离顶部多少像素）
   static const double _loadMoreThreshold = 100.0;
+
+  /// 正在编辑的消息（null 表示非编辑模式）
+  Message? _editingMessage;
+
+  /// 正在回复的消息
+  Message? _replyingMessage;
 
   @override
   void initState() {
@@ -117,6 +125,202 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     );
   }
 
+  // ========== 消息操作 ==========
+
+  /// 显示消息长按菜单
+  Future<void> _showMessageMenu(Message message, Offset position) async {
+    final action = await MessageLongPressMenu.show(
+      context: context,
+      message: message,
+      position: position,
+    );
+
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case MessageMenuAction.copy:
+        _copyMessage(message);
+      case MessageMenuAction.retry:
+        _retryMessage(message);
+      case MessageMenuAction.delete:
+        _deleteMessage(message);
+      case MessageMenuAction.recall:
+        _recallMessage(message);
+      case MessageMenuAction.edit:
+        _startEditMessage(message);
+      case MessageMenuAction.reply:
+        _startReplyMessage(message);
+      case MessageMenuAction.forward:
+        _forwardMessage(message);
+    }
+  }
+
+  /// 复制消息
+  void _copyMessage(Message message) {
+    Clipboard.setData(ClipboardData(text: message.body));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('已复制'),
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  /// 重试发送失败的消息
+  Future<void> _retryMessage(Message message) async {
+    // TODO: 实现重试逻辑
+    // 1. 更新消息状态为 sending
+    // 2. 重新发送消息
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('正在重试发送...')),
+    );
+
+    // 模拟重试
+    await ref
+        .read(messagesProvider(widget.conversationId).notifier)
+        .retryMessage(message);
+  }
+
+  /// 删除消息（本地删除）
+  Future<void> _deleteMessage(Message message) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除消息'),
+        content: const Text('确定要删除这条消息吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await ref
+          .read(messagesProvider(widget.conversationId).notifier)
+          .deleteMessage(message.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('消息已删除'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    }
+  }
+
+  /// 撤回消息
+  Future<void> _recallMessage(Message message) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('撤回消息'),
+        content: const Text('确定要撤回这条消息吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('撤回'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      // TODO: 实现撤回逻辑（需要 XMPP 支持）
+      await ref
+          .read(messagesProvider(widget.conversationId).notifier)
+          .recallMessage(message.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('消息已撤回'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    }
+  }
+
+  /// 开始编辑消息
+  void _startEditMessage(Message message) {
+    setState(() {
+      _editingMessage = message;
+      _replyingMessage = null;
+    });
+    // 设置输入框内容为消息文本
+    _inputKey.currentState?.setText(message.body);
+    _inputKey.currentState?.focus();
+  }
+
+  /// 取消编辑
+  void _cancelEdit() {
+    setState(() {
+      _editingMessage = null;
+    });
+    _inputKey.currentState?.clear();
+  }
+
+  /// 提交编辑
+  Future<void> _submitEdit(String newText) async {
+    if (_editingMessage == null) return;
+
+    final messageId = _editingMessage!.id;
+    setState(() {
+      _editingMessage = null;
+    });
+
+    // TODO: 实现编辑逻辑（需要 XMPP 支持）
+    await ref
+        .read(messagesProvider(widget.conversationId).notifier)
+        .editMessage(messageId, newText);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('消息已编辑'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  /// 开始回复消息
+  void _startReplyMessage(Message message) {
+    setState(() {
+      _replyingMessage = message;
+      _editingMessage = null;
+    });
+    _inputKey.currentState?.focus();
+  }
+
+  /// 取消回复
+  void _cancelReply() {
+    setState(() {
+      _replyingMessage = null;
+    });
+  }
+
+  /// 转发消息
+  void _forwardMessage(Message message) {
+    // TODO: 实现转发逻辑（显示会话选择器）
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('转发功能开发中')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final messages = ref.watch(messagesProvider(widget.conversationId));
@@ -154,11 +358,16 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
                 ? _buildEmptyState(colors)
                 : _buildMessageList(messages, colors),
           ),
+          // 编辑/回复指示栏
+          if (_editingMessage != null || _replyingMessage != null)
+            _buildEditReplyBar(colors),
           // 输入区域
           if (isConnected)
             MessageInputArea(
               key: _inputKey,
-              onSend: _sendTextMessage,
+              onSend: _editingMessage != null
+                  ? _submitEdit
+                  : _sendTextMessage,
               onImageSelected: _onImageSelected,
               onMultipleImagesSelected: _onMultipleImagesSelected,
               onVideoSelected: _onVideoSelected,
@@ -319,52 +528,162 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         break;
     }
 
+    // 是否显示头像（始终显示）
+    const showAvatar = true;
+
+    // 长按菜单回调（使用 Builder 获取正确的位置）
+    void onLongPress(TapDownDetails details) {
+      _showMessageMenu(message, details.globalPosition);
+    }
+
+    // 重试回调
+    void onRetry() {
+      _retryMessage(message);
+    }
+
     // 根据消息类型选择气泡
     switch (message.messageType) {
       case MessageType.image:
-        return ImageMessageBubble(
-          isSentByMe: message.isMe,
-          localFilePath: message.media?.localFilePath,
-          imageUrl: message.media?.remoteUrl,
-          width: message.media?.width?.toDouble(),
-          height: message.media?.height?.toDouble(),
-          status: status,
-          onTap: () => _previewImage(message),
+        return GestureDetector(
+          onLongPressStart: (details) => onLongPress(TapDownDetails(globalPosition: details.globalPosition)),
+          child: ImageMessageBubble(
+            isSentByMe: message.isMe,
+            localFilePath: message.media?.localFilePath,
+            imageUrl: message.media?.remoteUrl,
+            width: message.media?.width?.toDouble(),
+            height: message.media?.height?.toDouble(),
+            status: status,
+            senderId: message.senderId,
+            senderName: message.senderName,
+            senderAvatar: message.senderAvatar,
+            showAvatar: showAvatar,
+            onTap: () => _previewImage(message),
+            onRetry: onRetry,
+          ),
         );
 
       case MessageType.video:
-        return VideoMessageBubble(
-          isSentByMe: message.isMe,
-          thumbnailPath: message.media?.thumbnailUrl,
-          thumbnailUrl: message.media?.thumbnailUrl,
-          duration: message.media?.duration,
-          width: message.media?.width?.toDouble(),
-          height: message.media?.height?.toDouble(),
-          status: status,
-          onTap: () => _playVideo(message),
+        return GestureDetector(
+          onLongPressStart: (details) => onLongPress(TapDownDetails(globalPosition: details.globalPosition)),
+          child: VideoMessageBubble(
+            isSentByMe: message.isMe,
+            thumbnailPath: message.media?.thumbnailUrl,
+            thumbnailUrl: message.media?.thumbnailUrl,
+            duration: message.media?.duration,
+            width: message.media?.width?.toDouble(),
+            height: message.media?.height?.toDouble(),
+            status: status,
+            senderId: message.senderId,
+            senderName: message.senderName,
+            senderAvatar: message.senderAvatar,
+            showAvatar: showAvatar,
+            onTap: () => _playVideo(message),
+            onRetry: onRetry,
+          ),
         );
 
       case MessageType.file:
-        return FileMessageBubble(
-          fileName: message.media?.fileName ?? '未知文件',
-          isSentByMe: message.isMe,
-          fileSize: message.media?.fileSize,
-          mimeType: message.media?.mimeType,
-          status: status,
-          onTap: () => _openFile(message),
+        return GestureDetector(
+          onLongPressStart: (details) => onLongPress(TapDownDetails(globalPosition: details.globalPosition)),
+          child: FileMessageBubble(
+            fileName: message.media?.fileName ?? '未知文件',
+            isSentByMe: message.isMe,
+            fileSize: message.media?.fileSize,
+            mimeType: message.media?.mimeType,
+            status: status,
+            senderId: message.senderId,
+            senderName: message.senderName,
+            senderAvatar: message.senderAvatar,
+            showAvatar: showAvatar,
+            onTap: () => _openFile(message),
+            onRetry: onRetry,
+          ),
         );
 
       case MessageType.text:
       case MessageType.system:
-        return MessageBubble(
-          body: message.body,
-          timestamp: message.timestamp,
-          isSentByMe: message.isMe,
-          status: status,
-          senderName: message.senderName,
-          showSenderName: widget.isGroup && !message.isMe,
+        return GestureDetector(
+          onLongPressStart: (details) => onLongPress(TapDownDetails(globalPosition: details.globalPosition)),
+          child: MessageBubble(
+            body: message.body,
+            timestamp: message.timestamp,
+            isSentByMe: message.isMe,
+            status: status,
+            senderId: message.senderId,
+            senderName: message.senderName,
+            senderAvatar: message.senderAvatar,
+            showSenderName: widget.isGroup && !message.isMe,
+            showAvatar: showAvatar,
+            onRetry: onRetry,
+          ),
         );
     }
+  }
+
+  /// 构建编辑/回复指示栏
+  Widget _buildEditReplyBar(ImColorScheme colors) {
+    final isEditing = _editingMessage != null;
+    final message = _editingMessage ?? _replyingMessage;
+    if (message == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(
+          top: BorderSide(color: colors.divider, width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          // 图标
+          Icon(
+            isEditing ? Icons.edit : Icons.reply,
+            size: 18,
+            color: colors.primary,
+          ),
+          const SizedBox(width: 8),
+          // 标签和内容
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  isEditing ? '编辑消息' : '回复 ${message.senderName}',
+                  style: TextStyle(
+                    color: colors.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  message.displayBody,
+                  style: TextStyle(
+                    color: colors.textSecondary,
+                    fontSize: 12,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          // 关闭按钮
+          GestureDetector(
+            onTap: isEditing ? _cancelEdit : _cancelReply,
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.close,
+                size: 18,
+                color: colors.textTertiary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildDisconnectedBar(ImColorScheme colors) {
@@ -414,6 +733,21 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   }
 
   void _showChatSettings(BuildContext context) {
+    // 群聊直接跳转到群详情页
+    if (widget.isGroup) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GroupDetailPage(
+            groupId: widget.conversationId,
+            groupName: widget.conversationName,
+          ),
+        ),
+      );
+      return;
+    }
+
+    // 单聊显示设置菜单
     final colors = ImDesignTokens.colorSchemeOf(context);
 
     showModalBottomSheet(
@@ -447,14 +781,6 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
                 Navigator.pop(context);
               },
             ),
-            if (widget.isGroup)
-              ListTile(
-                leading: const Icon(Icons.group),
-                title: const Text('群聊设置'),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
           ],
         ),
       ),

@@ -5,6 +5,8 @@ import 'package:whixp/whixp.dart';
 
 import '../../config/im_sdk_config.dart';
 import '../im_connection_service.dart';
+import '../reconnect_manager.dart';
+import '../app_lifecycle_service.dart';
 
 /// 接收到的消息
 class ReceivedMessage {
@@ -42,6 +44,127 @@ class StandaloneConnectionService implements ImConnectionService {
   String? _currentJid;
   String? _dbPath;
 
+  /// 保存的配置（用于重连）
+  ImSdkConfig? _savedConfig;
+  ImCredentials? _savedCredentials;
+
+  /// 重连管理器
+  late final ReconnectManager _reconnectManager;
+
+  /// 生命周期服务
+  final AppLifecycleService _lifecycleService = AppLifecycleService();
+  StreamSubscription<AppLifecycleEvent>? _lifecycleSubscription;
+
+  /// App 后台时长阈值（超过此时长需要验证连接）
+  static const Duration _backgroundThreshold = Duration(seconds: 30);
+
+  StandaloneConnectionService() {
+    _reconnectManager = ReconnectManager(
+      onReconnect: _doReconnect,
+      onStateChange: _onReconnectStateChange,
+      onMaxAttemptsReached: _onMaxReconnectAttemptsReached,
+    );
+    _initLifecycleService();
+  }
+
+  void _initLifecycleService() {
+    _lifecycleService.start();
+    _lifecycleSubscription = _lifecycleService.events.listen(_onLifecycleEvent);
+  }
+
+  void _onLifecycleEvent(AppLifecycleEvent event) {
+    if (event is AppResumedEvent) {
+      _onAppResumed(event.backgroundDuration);
+    } else if (event is NetworkRestoredEvent) {
+      _onNetworkRestored();
+    } else if (event is NetworkLostEvent) {
+      _onNetworkLost();
+    }
+  }
+
+  /// App 从后台恢复
+  void _onAppResumed(Duration backgroundDuration) {
+    print('[Connection] App 从后台恢复，后台时长: ${backgroundDuration.inSeconds}s');
+
+    if (!isConnected && _savedConfig != null && _savedCredentials != null) {
+      // 未连接状态，触发重连
+      print('[Connection] 未连接，触发重连');
+      _reconnectManager.scheduleReconnect(reason: DisconnectReason.appResumed);
+      return;
+    }
+
+    // 后台时间超过阈值，验证连接
+    if (backgroundDuration > _backgroundThreshold) {
+      print('[Connection] 后台时间超过阈值，验证连接状态');
+      _verifyConnection();
+    }
+  }
+
+  /// 网络恢复
+  void _onNetworkRestored() {
+    print('[Connection] 网络已恢复');
+
+    if (!isConnected && _savedConfig != null && _savedCredentials != null) {
+      print('[Connection] 网络恢复但未连接，触发重连');
+      _reconnectManager.scheduleReconnect(reason: DisconnectReason.networkError);
+    }
+  }
+
+  /// 网络断开
+  void _onNetworkLost() {
+    print('[Connection] 网络已断开');
+    // 网络断开时不立即触发重连，等待网络恢复
+  }
+
+  /// 验证连接状态（发送 ping 或 presence）
+  void _verifyConnection() {
+    if (!isConnected || _whixp == null) return;
+
+    try {
+      // 发送 presence 来验证连接
+      _whixp!.sendPresence();
+      print('[Connection] 已发送 presence 验证连接');
+    } catch (e) {
+      print('[Connection] 验证连接失败: $e');
+      // 触发重连
+      _reconnectManager.scheduleReconnect(reason: DisconnectReason.networkError);
+    }
+  }
+
+  /// 执行重连
+  Future<bool> _doReconnect() async {
+    if (_savedConfig == null || _savedCredentials == null) {
+      print('[Connection] 无保存的连接信息，无法重连');
+      return false;
+    }
+
+    print('[Connection] 执行重连...');
+    return await connect(_savedConfig!, _savedCredentials!);
+  }
+
+  /// 重连状态变化回调
+  void _onReconnectStateChange(
+    ReconnectState state,
+    int attempt,
+    int maxAttempts,
+    Duration? nextRetryIn,
+  ) {
+    print('[Connection] 重连状态: $state, 尝试: $attempt/$maxAttempts');
+
+    if (state == ReconnectState.reconnecting) {
+      _updateState(ImConnectionState.reconnecting);
+    }
+  }
+
+  /// 达到最大重连次数
+  void _onMaxReconnectAttemptsReached() {
+    print('[Connection] 达到最大重连次数，停止重连');
+    _updateState(
+      ImConnectionState.failed,
+      error: '达到最大重连次数，请检查网络后手动重连',
+    );
+  }
+
   @override
   ImConnectionState get currentState => _currentState;
 
@@ -57,11 +180,21 @@ class StandaloneConnectionService implements ImConnectionService {
   @override
   bool get isConnected => _currentState == ImConnectionState.authenticated;
 
+  /// 重连管理器（供外部访问）
+  ReconnectManager get reconnectManager => _reconnectManager;
+
   @override
   Future<bool> connect(ImSdkConfig config, ImCredentials credentials) async {
     if (_whixp != null) {
-      await disconnect();
+      await _disconnectInternal(triggerReconnect: false);
     }
+
+    // 保存配置用于重连
+    _savedConfig = config;
+    _savedCredentials = credentials;
+
+    // 重置重连管理器
+    _reconnectManager.resetManualDisconnect();
 
     final completer = Completer<bool>();
 
@@ -115,6 +248,11 @@ class StandaloneConnectionService implements ImConnectionService {
           case TransportState.disconnected:
             print('[Whixp] Disconnected');
             _updateState(ImConnectionState.disconnected);
+            // 非手动断开时触发重连
+            if (!_reconnectManager.isManuallyDisconnected) {
+              print('[Whixp] 意外断开，调度重连');
+              _reconnectManager.scheduleReconnect(reason: DisconnectReason.networkError);
+            }
             break;
           case TransportState.connecting:
             print('[Whixp] Connecting to ${config.host}:${config.port}...');
@@ -137,6 +275,7 @@ class StandaloneConnectionService implements ImConnectionService {
       _whixp!.addEventHandler('streamNegotiated', (_) {
         print('[Whixp] Stream negotiated - authentication successful!');
         _updateState(ImConnectionState.authenticated);
+        _reconnectManager.markConnectionSuccess();
         // 自动发送 Presence，告知服务器客户端已上线
         _whixp!.sendPresence();
         if (!completer.isCompleted) {
@@ -149,6 +288,7 @@ class StandaloneConnectionService implements ImConnectionService {
         print('[Whixp] Session started!');
         if (!completer.isCompleted) {
           _updateState(ImConnectionState.authenticated);
+          _reconnectManager.markConnectionSuccess();
           _whixp!.sendPresence();
           completer.complete(true);
         }
@@ -159,6 +299,7 @@ class StandaloneConnectionService implements ImConnectionService {
         print('[Whixp] Authentication success event!');
         if (!completer.isCompleted) {
           _updateState(ImConnectionState.authenticated);
+          _reconnectManager.markConnectionSuccess();
           _whixp!.sendPresence();
           completer.complete(true);
         }
@@ -226,6 +367,18 @@ class StandaloneConnectionService implements ImConnectionService {
 
   @override
   Future<void> disconnect() async {
+    // 用户主动断开，标记为手动断开
+    _reconnectManager.markManualDisconnect();
+    await _disconnectInternal(triggerReconnect: false);
+    // 清除保存的凭据
+    _savedConfig = null;
+    _savedCredentials = null;
+  }
+
+  /// 内部断开连接方法
+  ///
+  /// [triggerReconnect] 是否触发重连（非手动断开时使用）
+  Future<void> _disconnectInternal({bool triggerReconnect = true}) async {
     if (_whixp != null) {
       try {
         _whixp!.disconnect();
@@ -248,6 +401,11 @@ class StandaloneConnectionService implements ImConnectionService {
         // 忽略清理错误
       }
       _dbPath = null;
+    }
+
+    // 触发重连
+    if (triggerReconnect && !_reconnectManager.isManuallyDisconnected) {
+      _reconnectManager.scheduleReconnect(reason: DisconnectReason.networkError);
     }
   }
 
@@ -363,8 +521,25 @@ class StandaloneConnectionService implements ImConnectionService {
 
   @override
   void dispose() {
+    _reconnectManager.markManualDisconnect();
+    _reconnectManager.dispose();
+    _lifecycleSubscription?.cancel();
+    _lifecycleService.dispose();
     disconnect();
     _stateController.close();
     _messageController.close();
+  }
+
+  /// 手动触发重连
+  ///
+  /// 当自动重连失败后，用户可以调用此方法手动重连
+  Future<bool> manualReconnect() async {
+    if (_savedConfig == null || _savedCredentials == null) {
+      print('[Connection] 无保存的连接信息，无法重连');
+      return false;
+    }
+
+    _reconnectManager.resetManualDisconnect();
+    return await connect(_savedConfig!, _savedCredentials!);
   }
 }

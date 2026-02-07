@@ -1,7 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/im_provider.dart';
 import '../sdk/models/message.dart';
+import '../sdk/models/media.dart';
+import '../theme/im_design_tokens.dart';
+import '../widgets/message_bubbles/message_bubbles.dart';
+import '../widgets/input/input.dart';
 
 /// 聊天详情页面
 class ChatDetailPage extends ConsumerStatefulWidget {
@@ -21,26 +28,16 @@ class ChatDetailPage extends ConsumerStatefulWidget {
 }
 
 class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
-  final _messageController = TextEditingController();
   final _scrollController = ScrollController();
-  final _focusNode = FocusNode();
+  final _inputKey = GlobalKey<MessageInputAreaState>();
 
   @override
   void dispose() {
-    _messageController.dispose();
     _scrollController.dispose();
-    _focusNode.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
-    final text = _messageController.text.trim();
-    if (text.isEmpty) return;
-
-    ref.read(messagesProvider(widget.conversationId).notifier).sendMessage(text);
-    _messageController.clear();
-
-    // 滚动到底部
+  void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -52,10 +49,46 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     });
   }
 
+  Future<void> _sendTextMessage(String text) async {
+    await ref
+        .read(messagesProvider(widget.conversationId).notifier)
+        .sendMessage(text);
+    _scrollToBottom();
+  }
+
+  void _onImageSelected(File file) {
+    _sendMediaMessage(file, MediaType.image);
+  }
+
+  void _onMultipleImagesSelected(List<File> files) {
+    for (final file in files) {
+      _sendMediaMessage(file, MediaType.image);
+    }
+  }
+
+  void _onVideoSelected(File file) {
+    _sendMediaMessage(file, MediaType.video);
+  }
+
+  void _onFileSelected(File file) {
+    _sendMediaMessage(file, MediaType.file);
+  }
+
+  void _sendMediaMessage(File file, MediaType type) {
+    // TODO: 实现媒体消息发送
+    // 1. 创建本地消息（乐观更新）
+    // 2. 上传媒体文件
+    // 3. 发送 XMPP 消息
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('即将发送: ${file.path.split('/').last}')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final messages = ref.watch(messagesProvider(widget.conversationId));
     final isConnected = ref.watch(isConnectedProvider);
+    final colors = ImDesignTokens.colorSchemeOf(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -66,11 +99,12 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
             if (widget.isGroup)
               Text(
                 '群聊',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: colors.textSecondary),
               ),
           ],
         ),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: colors.surface,
+        elevation: 0.5,
         actions: [
           IconButton(
             icon: const Icon(Icons.more_vert),
@@ -78,43 +112,54 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           ),
         ],
       ),
+      backgroundColor: colors.background,
       body: Column(
         children: [
           // 消息列表
           Expanded(
             child: messages.isEmpty
-                ? _buildEmptyState()
-                : _buildMessageList(messages),
+                ? _buildEmptyState(colors)
+                : _buildMessageList(messages, colors),
           ),
           // 输入区域
-          _buildInputArea(isConnected),
+          if (isConnected)
+            MessageInputArea(
+              key: _inputKey,
+              onSend: _sendTextMessage,
+              onImageSelected: _onImageSelected,
+              onMultipleImagesSelected: _onMultipleImagesSelected,
+              onVideoSelected: _onVideoSelected,
+              onFileSelected: _onFileSelected,
+            )
+          else
+            _buildDisconnectedBar(colors),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(ImColorScheme colors) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.chat_bubble_outline, size: 48, color: Colors.grey[400]),
+          Icon(Icons.chat_bubble_outline, size: 48, color: colors.textTertiary),
           const SizedBox(height: 16),
           Text(
             '暂无消息',
-            style: TextStyle(color: Colors.grey[500]),
+            style: TextStyle(color: colors.textSecondary),
           ),
           const SizedBox(height: 8),
           Text(
             '发送消息开始聊天吧',
-            style: TextStyle(color: Colors.grey[400], fontSize: 13),
+            style: TextStyle(color: colors.textTertiary, fontSize: 13),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMessageList(List<Message> messages) {
+  Widget _buildMessageList(List<Message> messages, ImColorScheme colors) {
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -122,161 +167,153 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       itemBuilder: (context, index) {
         final message = messages[index];
         final showTime = index == 0 ||
-            messages[index].timestamp.difference(messages[index - 1].timestamp).inMinutes > 5;
+            messages[index]
+                    .timestamp
+                    .difference(messages[index - 1].timestamp)
+                    .inMinutes >
+                5;
 
         return Column(
           children: [
-            if (showTime) _buildTimeHeader(message.timestamp),
-            _MessageBubble(message: message),
+            if (showTime) _buildTimeHeader(message.timestamp, colors),
+            _buildMessageBubble(message, colors),
           ],
         );
       },
     );
   }
 
-  Widget _buildTimeHeader(DateTime time) {
+  Widget _buildTimeHeader(DateTime time, ImColorScheme colors) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Text(
         _formatMessageTime(time),
-        style: TextStyle(color: Colors.grey[500], fontSize: 12),
+        style: TextStyle(color: colors.textTertiary, fontSize: 12),
       ),
     );
   }
 
-  Widget _buildInputArea(bool isConnected) {
+  Widget _buildMessageBubble(Message message, ImColorScheme colors) {
+    // 解析消息状态
+    MessageDisplayStatus? status;
+    switch (message.status) {
+      case 'sending':
+        status = MessageDisplayStatus.sending;
+        break;
+      case 'sent':
+        status = MessageDisplayStatus.sent;
+        break;
+      case 'delivered':
+        status = MessageDisplayStatus.delivered;
+        break;
+      case 'read':
+        status = MessageDisplayStatus.read;
+        break;
+      case 'failed':
+        status = MessageDisplayStatus.failed;
+        break;
+    }
+
+    // 根据消息类型选择气泡
+    switch (message.messageType) {
+      case MessageType.image:
+        return ImageMessageBubble(
+          isSentByMe: message.isMe,
+          localFilePath: message.media?.localFilePath,
+          imageUrl: message.media?.remoteUrl,
+          width: message.media?.width?.toDouble(),
+          height: message.media?.height?.toDouble(),
+          status: status,
+          onTap: () => _previewImage(message),
+        );
+
+      case MessageType.video:
+        return VideoMessageBubble(
+          isSentByMe: message.isMe,
+          thumbnailPath: message.media?.thumbnailUrl,
+          thumbnailUrl: message.media?.thumbnailUrl,
+          duration: message.media?.duration,
+          width: message.media?.width?.toDouble(),
+          height: message.media?.height?.toDouble(),
+          status: status,
+          onTap: () => _playVideo(message),
+        );
+
+      case MessageType.file:
+        return FileMessageBubble(
+          fileName: message.media?.fileName ?? '未知文件',
+          isSentByMe: message.isMe,
+          fileSize: message.media?.fileSize,
+          mimeType: message.media?.mimeType,
+          status: status,
+          onTap: () => _openFile(message),
+        );
+
+      case MessageType.text:
+      case MessageType.system:
+        return MessageBubble(
+          body: message.body,
+          timestamp: message.timestamp,
+          isSentByMe: message.isMe,
+          status: status,
+          senderName: message.senderName,
+          showSenderName: widget.isGroup && !message.isMe,
+        );
+    }
+  }
+
+  Widget _buildDisconnectedBar(ImColorScheme colors) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
+        color: colors.surface,
+        border: Border(
+          top: BorderSide(color: colors.divider, width: 0.5),
+        ),
       ),
       child: SafeArea(
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 更多功能按钮
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              color: Colors.grey[600],
-              onPressed: isConnected ? () => _showMoreOptions(context) : null,
-            ),
-            // 输入框
-            Expanded(
-              child: Container(
-                constraints: const BoxConstraints(maxHeight: 120),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: TextField(
-                  controller: _messageController,
-                  focusNode: _focusNode,
-                  enabled: isConnected,
-                  maxLines: null,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _sendMessage(),
-                  decoration: InputDecoration(
-                    hintText: isConnected ? '输入消息...' : '未连接',
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            Icon(Icons.cloud_off, size: 16, color: colors.error),
             const SizedBox(width: 8),
-            // 发送按钮
-            IconButton(
-              icon: const Icon(Icons.send),
-              color: Theme.of(context).colorScheme.primary,
-              onPressed: isConnected ? _sendMessage : null,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showMoreOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Wrap(
-            spacing: 24,
-            runSpacing: 16,
-            children: [
-              _buildOptionItem(Icons.photo, '图片', () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('图片功能开发中')),
-                );
-              }),
-              _buildOptionItem(Icons.camera_alt, '拍照', () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('拍照功能开发中')),
-                );
-              }),
-              _buildOptionItem(Icons.folder, '文件', () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('文件功能开发中')),
-                );
-              }),
-              _buildOptionItem(Icons.location_on, '位置', () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('位置功能开发中')),
-                );
-              }),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOptionItem(IconData icon, String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 60,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: Colors.grey[700]),
-            ),
-            const SizedBox(height: 8),
             Text(
-              label,
-              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+              '连接已断开',
+              style: TextStyle(color: colors.error),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  void _previewImage(Message message) {
+    // TODO: 实现图片预览
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('图片预览功能开发中')),
+    );
+  }
+
+  void _playVideo(Message message) {
+    // TODO: 实现视频播放
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('视频播放功能开发中')),
+    );
+  }
+
+  void _openFile(Message message) {
+    // TODO: 实现文件打开
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('文件打开功能开发中')),
     );
   }
 
   void _showChatSettings(BuildContext context) {
+    final colors = ImDesignTokens.colorSchemeOf(context);
+
     showModalBottomSheet(
       context: context,
+      backgroundColor: colors.surface,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -330,83 +367,5 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     } else {
       return '${time.month}/${time.day} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
     }
-  }
-}
-
-/// 消息气泡
-class _MessageBubble extends StatelessWidget {
-  final Message message;
-
-  const _MessageBubble({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final isMe = message.isMe;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (!isMe) _buildAvatar(),
-          if (!isMe) const SizedBox(width: 8),
-          Flexible(
-            child: Column(
-              crossAxisAlignment:
-                  isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-              children: [
-                if (!isMe)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, bottom: 2),
-                    child: Text(
-                      message.senderName,
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                    ),
-                  ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isMe ? Colors.blue[500] : Colors.grey[200],
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(isMe ? 16 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 16),
-                    ),
-                  ),
-                  child: Text(
-                    message.body,
-                    style: TextStyle(
-                      color: isMe ? Colors.white : Colors.black87,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (isMe) const SizedBox(width: 8),
-          if (isMe) _buildAvatar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAvatar() {
-    return CircleAvatar(
-      radius: 18,
-      backgroundColor: message.isMe ? Colors.blue[100] : Colors.grey[300],
-      child: Text(
-        message.senderName[0].toUpperCase(),
-        style: TextStyle(
-          color: message.isMe ? Colors.blue[700] : Colors.grey[700],
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
   }
 }

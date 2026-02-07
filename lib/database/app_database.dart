@@ -148,6 +148,35 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// 获取指定消息之前的历史消息（用于分页加载）
+  ///
+  /// [conversationId] 会话 ID
+  /// [beforeTimestamp] 在此时间戳之前的消息
+  /// [limit] 每页数量
+  Future<List<Message>> getMessagesBefore(
+    String conversationId, {
+    required DateTime beforeTimestamp,
+    int limit = 20,
+  }) {
+    return (select(messages)
+          ..where((t) =>
+              t.conversationId.equals(conversationId) &
+              t.timestamp.isSmallerThanValue(beforeTimestamp))
+          ..orderBy([(t) => OrderingTerm.desc(t.timestamp)])
+          ..limit(limit))
+        .get();
+  }
+
+  /// 获取会话的消息总数
+  Future<int> getMessageCount(String conversationId) async {
+    final count = countAll();
+    final query = selectOnly(messages)
+      ..addColumns([count])
+      ..where(messages.conversationId.equals(conversationId));
+    final result = await query.getSingle();
+    return result.read(count) ?? 0;
+  }
+
   /// 监听会话消息变化
   Stream<List<Message>> watchMessages(String conversationId) {
     return (select(messages)

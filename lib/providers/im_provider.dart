@@ -301,9 +301,30 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
   StreamSubscription? _messageSubscription;
   StreamSubscription? _dbSubscription;
 
+  /// 每次加载的消息数量
+  static const int _pageSize = 20;
+
+  /// 是否还有更多本地历史消息
+  bool _hasMoreHistory = true;
+
+  /// 是否正在加载历史消息
+  bool _isLoadingHistory = false;
+
+  /// 是否正在刷新
+  bool _isRefreshing = false;
+
   MessagesNotifier(this.ref, this.conversationId) : super([]) {
     _init();
   }
+
+  /// 是否还有更多历史消息
+  bool get hasMoreHistory => _hasMoreHistory;
+
+  /// 是否正在加载历史消息
+  bool get isLoadingHistory => _isLoadingHistory;
+
+  /// 是否正在刷新
+  bool get isRefreshing => _isRefreshing;
 
   Future<void> _init() async {
     // 从数据库加载历史消息
@@ -316,13 +337,31 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
 
   Future<void> _loadFromDatabase() async {
     final repository = ref.read(repositoryProvider);
-    state = await repository.getMessages(conversationId);
+    state = await repository.getMessages(conversationId, limit: _pageSize);
+
+    // 检查是否有更多历史消息
+    final totalCount = await repository.getMessageCount(conversationId);
+    _hasMoreHistory = state.length < totalCount;
   }
 
   void _listenToDatabase() {
     final repository = ref.read(repositoryProvider);
     _dbSubscription = repository.watchMessages(conversationId).listen((messages) {
-      state = messages;
+      // 保持当前分页状态，只更新已加载的部分
+      if (state.isEmpty) {
+        state = messages.take(_pageSize).toList();
+      } else {
+        // 找到当前最旧消息的时间
+        final oldestTimestamp = state.first.timestamp;
+        // 保留已加载的历史消息 + 新消息
+        final newMessages = messages.where(
+          (m) => m.timestamp.isAfter(oldestTimestamp) ||
+                 state.any((s) => s.id == m.id)
+        ).toList();
+        if (newMessages.isNotEmpty) {
+          state = newMessages;
+        }
+      }
     });
   }
 
@@ -335,6 +374,68 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
         // 这里只需要等待数据库更新即可
       }
     });
+  }
+
+  /// 加载更多历史消息（滚动到顶部时调用）
+  Future<void> loadMoreHistory() async {
+    if (!_hasMoreHistory || _isLoadingHistory || state.isEmpty) {
+      return;
+    }
+
+    _isLoadingHistory = true;
+
+    try {
+      final repository = ref.read(repositoryProvider);
+
+      // 获取当前最旧消息的时间戳
+      final oldestMessage = state.first;
+      final olderMessages = await repository.getMessagesBefore(
+        conversationId,
+        beforeTimestamp: oldestMessage.timestamp,
+        limit: _pageSize,
+      );
+
+      if (olderMessages.isEmpty) {
+        _hasMoreHistory = false;
+        return;
+      }
+
+      // 如果返回数量少于请求数量，说明没有更多了
+      if (olderMessages.length < _pageSize) {
+        _hasMoreHistory = false;
+      }
+
+      // 将历史消息插入到列表开头
+      state = [...olderMessages, ...state];
+    } catch (e) {
+      // 加载失败时保持原状态
+    } finally {
+      _isLoadingHistory = false;
+    }
+  }
+
+  /// 从服务器刷新消息（下拉刷新时调用）
+  ///
+  /// 目前演示版本只从本地数据库重新加载
+  /// 实际项目中应调用 MAM 同步
+  Future<void> refreshFromServer() async {
+    if (_isRefreshing) return;
+
+    _isRefreshing = true;
+
+    try {
+      // TODO: 实际项目中这里应该调用 MAM 同步
+      // 目前只从数据库重新加载
+      final repository = ref.read(repositoryProvider);
+      final messages = await repository.getMessages(conversationId, limit: _pageSize);
+
+      final totalCount = await repository.getMessageCount(conversationId);
+      _hasMoreHistory = messages.length < totalCount;
+
+      state = messages;
+    } finally {
+      _isRefreshing = false;
+    }
   }
 
   void addMessage(Message message) {

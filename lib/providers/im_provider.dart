@@ -7,6 +7,7 @@ import '../sdk/models/message.dart';
 import '../sdk/models/contact.dart';
 import '../sdk/services/impl/standalone_connection_service.dart';
 import '../sdk/services/im_connection_service.dart';
+import '../sdk/services/reconnect_manager.dart';
 
 /// 数据库 Provider
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -44,6 +45,18 @@ final isConnectedProvider = Provider<bool>((ref) {
 final currentJidProvider = Provider<String?>((ref) {
   final service = ref.watch(imConnectionServiceProvider);
   return service.currentJid;
+});
+
+/// 重连状态 Provider
+final reconnectStateProvider = Provider<ReconnectState>((ref) {
+  final service = ref.watch(imConnectionServiceProvider);
+  return service.reconnectManager.state;
+});
+
+/// 是否正在重连
+final isReconnectingProvider = Provider<bool>((ref) {
+  final state = ref.watch(reconnectStateProvider);
+  return state == ReconnectState.waiting || state == ReconnectState.reconnecting;
 });
 
 /// 会话列表 Provider（监听数据库变化）

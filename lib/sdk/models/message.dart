@@ -1,3 +1,16 @@
+import 'dart:convert';
+
+import 'media.dart';
+
+/// 消息类型
+enum MessageType {
+  text,
+  image,
+  video,
+  file,
+  system,
+}
+
 /// 消息模型
 class Message {
   final String id;
@@ -7,8 +20,9 @@ class Message {
   final String body;
   final DateTime timestamp;
   final bool isMe;
-  final String? status; // sent, delivered, read, failed
-  final String? type; // text, image, file, etc.
+  final String? status; // sending, sent, delivered, read, failed
+  final MessageType messageType;
+  final MediaMetadata? media;
 
   const Message({
     required this.id,
@@ -19,8 +33,32 @@ class Message {
     required this.timestamp,
     this.isMe = false,
     this.status = 'sent',
-    this.type = 'text',
+    this.messageType = MessageType.text,
+    this.media,
   });
+
+  /// 是否是媒体消息
+  bool get isMediaMessage =>
+      messageType == MessageType.image ||
+      messageType == MessageType.video ||
+      messageType == MessageType.file;
+
+  /// 获取显示文本（媒体消息显示类型描述）
+  String get displayBody {
+    switch (messageType) {
+      case MessageType.image:
+        return '[图片]';
+      case MessageType.video:
+        return '[视频]';
+      case MessageType.file:
+        return '[文件] ${media?.fileName ?? ''}';
+      case MessageType.system:
+        return body;
+      case MessageType.text:
+      default:
+        return body;
+    }
+  }
 
   Message copyWith({
     String? id,
@@ -31,7 +69,8 @@ class Message {
     DateTime? timestamp,
     bool? isMe,
     String? status,
-    String? type,
+    MessageType? messageType,
+    MediaMetadata? media,
   }) {
     return Message(
       id: id ?? this.id,
@@ -42,8 +81,59 @@ class Message {
       timestamp: timestamp ?? this.timestamp,
       isMe: isMe ?? this.isMe,
       status: status ?? this.status,
-      type: type ?? this.type,
+      messageType: messageType ?? this.messageType,
+      media: media ?? this.media,
     );
+  }
+
+  /// 从 JSON 创建
+  factory Message.fromJson(Map<String, dynamic> json) {
+    return Message(
+      id: json['id'] as String,
+      conversationId: json['conversationId'] as String,
+      senderId: json['senderId'] as String,
+      senderName: json['senderName'] as String,
+      body: json['body'] as String,
+      timestamp: DateTime.parse(json['timestamp'] as String),
+      isMe: json['isMe'] as bool? ?? false,
+      status: json['status'] as String?,
+      messageType: MessageType.values.firstWhere(
+        (t) => t.name == json['messageType'],
+        orElse: () => MessageType.text,
+      ),
+      media: json['media'] != null
+          ? MediaMetadata.fromJson(json['media'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+
+  /// 转换为 JSON
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'conversationId': conversationId,
+      'senderId': senderId,
+      'senderName': senderName,
+      'body': body,
+      'timestamp': timestamp.toIso8601String(),
+      'isMe': isMe,
+      'status': status,
+      'messageType': messageType.name,
+      'media': media?.toJson(),
+    };
+  }
+
+  /// 序列化媒体数据为 JSON 字符串（用于数据库存储）
+  String? get mediaJson => media != null ? jsonEncode(media!.toJson()) : null;
+
+  /// 从 JSON 字符串反序列化媒体数据
+  static MediaMetadata? parseMediaJson(String? json) {
+    if (json == null || json.isEmpty) return null;
+    try {
+      return MediaMetadata.fromJson(jsonDecode(json) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/im_provider.dart';
 import '../sdk/models/conversation.dart';
 import '../sdk/services/im_connection_service.dart' show ImConnectionState, ConnectionStateEvent;
+import '../theme/im_design_tokens.dart';
 import 'chat_detail_page.dart';
 import 'create_group_page.dart';
 import 'login_page.dart';
@@ -16,49 +17,21 @@ class ConversationListPage extends ConsumerWidget {
     final isConnected = ref.watch(isConnectedProvider);
     final conversations = ref.watch(conversationsProvider);
     final connectionState = ref.watch(imConnectionStateProvider);
+    final colors = ImDesignTokens.colorSchemeOf(context);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('消息'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: colors.surface,
+        elevation: 0.5,
         actions: [
-          // 创建群聊按钮
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.add),
-            onSelected: (value) {
-              if (value == 'group') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const CreateGroupPage(),
-                  ),
-                );
-              } else if (value == 'chat') {
-                _showNewChatDialog(context, ref);
-              }
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'chat',
-                child: Row(
-                  children: [
-                    Icon(Icons.chat, size: 20),
-                    SizedBox(width: 12),
-                    Text('发起聊天'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'group',
-                child: Row(
-                  children: [
-                    Icon(Icons.group_add, size: 20),
-                    SizedBox(width: 12),
-                    Text('创建群聊'),
-                  ],
-                ),
-              ),
-            ],
+          // 创建群聊按钮 - 使用自定义深色弹出菜单
+          Builder(
+            builder: (buttonContext) => IconButton(
+              icon: const Icon(Icons.add_circle_outline),
+              tooltip: '添加',
+              onPressed: () => _showAddMenuPopup(buttonContext, context, ref),
+            ),
           ),
         ],
       ),
@@ -91,7 +64,7 @@ class ConversationListPage extends ConsumerWidget {
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: _getStateColor(event.state).withOpacity(0.1),
+          color: _getStateColor(event.state).withValues(alpha: 0.1),
           child: Row(
             children: [
               if (event.state == ImConnectionState.connecting ||
@@ -126,7 +99,7 @@ class ConversationListPage extends ConsumerWidget {
         );
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 
@@ -343,6 +316,75 @@ class ConversationListPage extends ConsumerWidget {
     );
   }
 
+  /// 显示添加菜单弹窗
+  void _showAddMenuPopup(BuildContext buttonContext, BuildContext context, WidgetRef ref) {
+    // 获取按钮位置
+    final RenderBox button = buttonContext.findRenderObject() as RenderBox;
+    final buttonPosition = button.localToGlobal(Offset.zero);
+    final buttonSize = button.size;
+
+    // 计算菜单位置（右对齐，在按钮下方）
+    const popupWidth = 140.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final rightPadding = screenWidth - buttonPosition.dx - buttonSize.width;
+
+    showGeneralDialog(
+      context: context,
+      barrierColor: Colors.transparent,
+      barrierDismissible: true,
+      barrierLabel: '关闭菜单',
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        return Stack(
+          children: [
+            // 点击外部关闭
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => Navigator.of(dialogContext).pop(),
+                behavior: HitTestBehavior.opaque,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            // 菜单
+            Positioned(
+              top: buttonPosition.dy + buttonSize.height + 4,
+              right: rightPadding + 8,
+              child: FadeTransition(
+                opacity: CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOut,
+                ),
+                child: ScaleTransition(
+                  scale: CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutBack,
+                  ),
+                  alignment: Alignment.topRight,
+                  child: _AddMenuPopup(
+                    width: popupWidth,
+                    onChatTap: () {
+                      Navigator.of(dialogContext).pop();
+                      _showNewChatDialog(context, ref);
+                    },
+                    onGroupTap: () {
+                      Navigator.of(dialogContext).pop();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CreateGroupPage(),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+      transitionDuration: const Duration(milliseconds: 200),
+    );
+  }
+
   Color _getStateColor(ImConnectionState state) {
     switch (state) {
       case ImConnectionState.disconnected:
@@ -465,4 +507,142 @@ class _ConversationTile extends StatelessWidget {
       return '${time.month}/${time.day}';
     }
   }
+}
+
+/// 添加菜单弹窗
+class _AddMenuPopup extends StatelessWidget {
+  final double width;
+  final VoidCallback onChatTap;
+  final VoidCallback onGroupTap;
+
+  const _AddMenuPopup({
+    required this.width,
+    required this.onChatTap,
+    required this.onGroupTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const menuColor = Color(0xFF2C2C2C);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 小三角箭头
+        Padding(
+          padding: const EdgeInsets.only(right: 14),
+          child: CustomPaint(
+            size: const Size(12, 6),
+            painter: _TrianglePainter(color: menuColor),
+          ),
+        ),
+        // 菜单主体
+        Container(
+          width: width,
+          decoration: BoxDecoration(
+            color: menuColor,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                offset: const Offset(0, 4),
+                blurRadius: 16,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _AddMenuItem(
+                icon: Icons.chat_bubble_outline,
+                label: '发起聊天',
+                onTap: onChatTap,
+              ),
+              Container(
+                height: 0.5,
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                color: Colors.white.withValues(alpha: 0.1),
+              ),
+              _AddMenuItem(
+                icon: Icons.group_add_outlined,
+                label: '创建群聊',
+                onTap: onGroupTap,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 菜单项
+class _AddMenuItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _AddMenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: Colors.white,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 三角形绘制器
+class _TrianglePainter extends CustomPainter {
+  final Color color;
+
+  _TrianglePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final path = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

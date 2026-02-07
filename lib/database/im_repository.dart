@@ -85,6 +85,32 @@ class ImRepository {
     return list.reversed.map(_toModelMessage).toList();
   }
 
+  /// 获取指定时间之前的历史消息（用于分页加载）
+  ///
+  /// [conversationId] 会话 ID
+  /// [beforeTimestamp] 在此时间戳之前的消息
+  /// [limit] 每页数量（默认 20）
+  ///
+  /// 返回按时间升序排列的消息列表（最老的在前）
+  Future<List<models.Message>> getMessagesBefore(
+    String conversationId, {
+    required DateTime beforeTimestamp,
+    int limit = 20,
+  }) async {
+    final list = await _db.getMessagesBefore(
+      conversationId,
+      beforeTimestamp: beforeTimestamp,
+      limit: limit,
+    );
+    // 数据库按时间降序返回，反转为升序（最老的在前）
+    return list.reversed.map(_toModelMessage).toList();
+  }
+
+  /// 获取会话的消息总数
+  Future<int> getMessageCount(String conversationId) async {
+    return await _db.getMessageCount(conversationId);
+  }
+
   /// 保存消息
   Future<void> saveMessage(models.Message message) async {
     await _db.insertMessage(MessagesCompanion(
@@ -96,7 +122,7 @@ class ImRepository {
       timestamp: Value(message.timestamp),
       isMe: Value(message.isMe),
       status: Value(message.status ?? 'sent'),
-      type: Value(message.type ?? 'text'),
+      type: Value(message.messageType.name),
       createdAt: Value(DateTime.now()),
     ));
   }
@@ -154,7 +180,10 @@ class ImRepository {
       timestamp: db.timestamp,
       isMe: db.isMe,
       status: db.status,
-      type: db.type,
+      messageType: models.MessageType.values.firstWhere(
+        (t) => t.name == db.type,
+        orElse: () => models.MessageType.text,
+      ),
     );
   }
 

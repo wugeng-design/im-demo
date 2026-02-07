@@ -63,6 +63,16 @@ class MessageInputAreaState extends State<MessageInputArea> {
     _focusNode.requestFocus();
   }
 
+  /// 清空文本
+  void clear() {
+    _textController.clear();
+  }
+
+  /// 获取焦点
+  void focus() {
+    _focusNode.requestFocus();
+  }
+
   @override
   void initState() {
     super.initState();

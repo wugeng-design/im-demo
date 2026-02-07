@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart' hide Conversation, Message, Contact;
 import '../database/im_repository.dart';
@@ -503,6 +504,95 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
       // 更新消息状态为失败
       await repository.updateMessageStatus(message.id, 'failed');
     }
+  }
+
+  /// 重试发送失败的消息
+  Future<void> retryMessage(Message message) async {
+    final service = ref.read(imConnectionServiceProvider);
+    final repository = ref.read(repositoryProvider);
+
+    // 更新状态为发送中
+    await repository.updateMessageStatus(message.id, 'sending');
+
+    try {
+      final isGroup = conversationId.contains('@conference.');
+      await service.sendMessage(conversationId, message.body, isGroupChat: isGroup);
+
+      // 更新状态为已发送
+      await repository.updateMessageStatus(message.id, 'sent');
+    } catch (e) {
+      // 更新状态为失败
+      await repository.updateMessageStatus(message.id, 'failed');
+    }
+  }
+
+  /// 删除消息（本地删除）
+  Future<void> deleteMessage(String messageId) async {
+    final db = ref.read(databaseProvider);
+
+    // 从数据库删除消息
+    await (db.delete(db.messages)..where((t) => t.id.equals(messageId))).go();
+
+    // 从状态中移除
+    state = state.where((m) => m.id != messageId).toList();
+  }
+
+  /// 撤回消息
+  ///
+  /// 目前只是本地删除并添加系统消息
+  /// 实际项目中需要调用 XMPP 撤回协议
+  Future<void> recallMessage(String messageId) async {
+    final repository = ref.read(repositoryProvider);
+    final db = ref.read(databaseProvider);
+
+    // 找到要撤回的消息
+    final message = state.firstWhere(
+      (m) => m.id == messageId,
+      orElse: () => throw StateError('Message not found'),
+    );
+
+    // 从数据库删除原消息
+    await (db.delete(db.messages)..where((t) => t.id.equals(messageId))).go();
+
+    // 创建撤回提示消息
+    final recallNotice = Message(
+      id: '${messageId}_recall',
+      conversationId: conversationId,
+      senderId: message.senderId,
+      senderName: message.senderName,
+      body: '你撤回了一条消息',
+      timestamp: message.timestamp,
+      isMe: message.isMe,
+      messageType: MessageType.system,
+    );
+
+    await repository.saveMessage(recallNotice);
+
+    // TODO: 实际项目中这里应该发送 XMPP 撤回请求
+  }
+
+  /// 编辑消息
+  ///
+  /// 目前只是本地更新消息内容
+  /// 实际项目中需要调用 XMPP 编辑协议 (XEP-0308)
+  Future<void> editMessage(String messageId, String newBody) async {
+    final db = ref.read(databaseProvider);
+
+    // 更新数据库中的消息内容
+    await (db.update(db.messages)..where((t) => t.id.equals(messageId)))
+        .write(MessagesCompanion(
+      body: Value(newBody),
+    ));
+
+    // 更新状态中的消息
+    state = state.map((m) {
+      if (m.id == messageId) {
+        return m.copyWith(body: newBody);
+      }
+      return m;
+    }).toList();
+
+    // TODO: 实际项目中这里应该发送 XMPP 编辑请求 (XEP-0308)
   }
 
   @override

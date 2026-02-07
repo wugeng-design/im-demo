@@ -33,8 +33,8 @@ enum ServerPreset {
 
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _usernameController = TextEditingController(text: 'admin');
-  final _passwordController = TextEditingController(text: 'admin');
-  final _hostController = TextEditingController(text: 'localhost');
+  final _passwordController = TextEditingController(text: 'admin123');
+  final _hostController = TextEditingController(text: '43.143.160.115');
   final _portController = TextEditingController(text: '5222');
   final _domainController = TextEditingController(text: 'localhost');
 
@@ -42,7 +42,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _showAdvanced = false;
   bool _useTls = false;
   bool _obscurePassword = true;
-  ServerPreset _selectedPreset = ServerPreset.localhost;
+  ServerPreset _selectedPreset = ServerPreset.tencentCloud;
 
   @override
   void dispose() {

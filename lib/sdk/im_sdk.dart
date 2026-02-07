@@ -9,6 +9,9 @@ export 'extensions/im_extension_registry.dart';
 
 // 核心模型
 export 'models/im_conversation.dart';
+export 'models/conversation.dart';
+export 'models/message.dart';
+export 'models/contact.dart';
 
 // 配置
 export 'config/im_sdk_config.dart';

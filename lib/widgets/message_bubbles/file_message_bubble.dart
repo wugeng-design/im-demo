@@ -1,0 +1,256 @@
+import 'package:flutter/material.dart';
+
+import '../../theme/im_design_tokens.dart';
+import '../../theme/message_styles.dart';
+import 'message_bubble.dart';
+
+/// 文件消息气泡
+class FileMessageBubble extends StatelessWidget {
+  const FileMessageBubble({
+    super.key,
+    required this.fileName,
+    required this.isSentByMe,
+    this.fileSize,
+    this.mimeType,
+    this.timestamp,
+    this.status,
+    this.uploadProgress,
+    this.downloadProgress,
+    this.onTap,
+    this.onLongPress,
+    this.onRetry,
+  });
+
+  /// 文件名
+  final String fileName;
+
+  /// 是否是自己发送的
+  final bool isSentByMe;
+
+  /// 文件大小（字节）
+  final int? fileSize;
+
+  /// MIME 类型
+  final String? mimeType;
+
+  /// 时间戳
+  final DateTime? timestamp;
+
+  /// 消息状态
+  final MessageDisplayStatus? status;
+
+  /// 上传进度 (0.0 - 1.0)
+  final double? uploadProgress;
+
+  /// 下载进度 (0.0 - 1.0)
+  final double? downloadProgress;
+
+  /// 点击回调
+  final VoidCallback? onTap;
+
+  /// 长按回调
+  final VoidCallback? onLongPress;
+
+  /// 重试回调
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = ImDesignTokens.colorSchemeOf(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment:
+            isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // 发送失败图标
+          if (isSentByMe && status == MessageDisplayStatus.failed)
+            GestureDetector(
+              onTap: onRetry,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(
+                  Icons.error_outline,
+                  size: 18,
+                  color: colors.error,
+                ),
+              ),
+            ),
+          // 文件气泡
+          GestureDetector(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 240),
+              padding: const EdgeInsets.all(12),
+              decoration: MessageStyles.bubble(
+                isSentByMe
+                    ? colors.messageBubbleSent
+                    : colors.messageBubbleReceived,
+                radius: isSentByMe
+                    ? MessageStyles.bubbleRadiusSent
+                    : MessageStyles.bubbleRadiusReceived,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 文件图标
+                  _buildFileIcon(colors),
+                  const SizedBox(width: 12),
+                  // 文件信息
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 文件名
+                        Text(
+                          fileName,
+                          style: TextStyle(
+                            color: isSentByMe
+                                ? Colors.black87
+                                : colors.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        // 文件大小和状态
+                        _buildSubtitle(colors),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 构建文件图标
+  Widget _buildFileIcon(ImColorScheme colors) {
+    // 根据文件类型选择图标
+    IconData icon;
+    Color iconColor;
+
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        icon = Icons.picture_as_pdf;
+        iconColor = Colors.red;
+        break;
+      case 'doc':
+      case 'docx':
+        icon = Icons.description;
+        iconColor = Colors.blue;
+        break;
+      case 'xls':
+      case 'xlsx':
+        icon = Icons.table_chart;
+        iconColor = Colors.green;
+        break;
+      case 'ppt':
+      case 'pptx':
+        icon = Icons.slideshow;
+        iconColor = Colors.orange;
+        break;
+      case 'zip':
+      case 'rar':
+      case '7z':
+        icon = Icons.folder_zip;
+        iconColor = Colors.amber;
+        break;
+      case 'mp3':
+      case 'wav':
+      case 'aac':
+        icon = Icons.audio_file;
+        iconColor = Colors.purple;
+        break;
+      default:
+        icon = Icons.insert_drive_file;
+        iconColor = colors.textSecondary;
+    }
+
+    // 如果正在上传或下载，显示进度
+    if ((uploadProgress != null && uploadProgress! < 1.0) ||
+        (downloadProgress != null && downloadProgress! < 1.0)) {
+      final progress = uploadProgress ?? downloadProgress ?? 0;
+      return SizedBox(
+        width: 40,
+        height: 40,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            CircularProgressIndicator(
+              value: progress,
+              strokeWidth: 3,
+              color: colors.primary,
+            ),
+            Text(
+              '${(progress * 100).toInt()}%',
+              style: TextStyle(
+                fontSize: 9,
+                color: colors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: iconColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(icon, color: iconColor, size: 24),
+    );
+  }
+
+  /// 构建副标题（文件大小和状态）
+  Widget _buildSubtitle(ImColorScheme colors) {
+    final parts = <String>[];
+
+    // 文件大小
+    if (fileSize != null) {
+      parts.add(_formatFileSize(fileSize!));
+    }
+
+    // 状态文本
+    if (status == MessageDisplayStatus.sending) {
+      parts.add('发送中...');
+    } else if (uploadProgress != null && uploadProgress! < 1.0) {
+      parts.add('上传中 ${(uploadProgress! * 100).toInt()}%');
+    } else if (downloadProgress != null && downloadProgress! < 1.0) {
+      parts.add('下载中 ${(downloadProgress! * 100).toInt()}%');
+    }
+
+    return Text(
+      parts.join(' · '),
+      style: TextStyle(
+        color: isSentByMe ? Colors.black45 : colors.textTertiary,
+        fontSize: 12,
+      ),
+    );
+  }
+
+  /// 格式化文件大小
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) {
+      return '$bytes B';
+    } else if (bytes < 1024 * 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    } else if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    } else {
+      return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
+    }
+  }
+}

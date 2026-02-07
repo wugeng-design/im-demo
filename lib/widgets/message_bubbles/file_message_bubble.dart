@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/im_design_tokens.dart';
 import '../../theme/message_styles.dart';
+import '../im_avatar.dart';
 import 'message_bubble.dart';
 
 /// 文件消息气泡
@@ -16,9 +17,14 @@ class FileMessageBubble extends StatelessWidget {
     this.status,
     this.uploadProgress,
     this.downloadProgress,
+    this.senderId,
+    this.senderName,
+    this.senderAvatar,
+    this.showAvatar = false,
     this.onTap,
     this.onLongPress,
     this.onRetry,
+    this.onAvatarTap,
   });
 
   /// 文件名
@@ -45,6 +51,18 @@ class FileMessageBubble extends StatelessWidget {
   /// 下载进度 (0.0 - 1.0)
   final double? downloadProgress;
 
+  /// 发送者 ID（用于头像占位符颜色）
+  final String? senderId;
+
+  /// 发送者名称
+  final String? senderName;
+
+  /// 发送者头像 URL
+  final String? senderAvatar;
+
+  /// 是否显示头像
+  final bool showAvatar;
+
   /// 点击回调
   final VoidCallback? onTap;
 
@@ -53,6 +71,9 @@ class FileMessageBubble extends StatelessWidget {
 
   /// 重试回调
   final VoidCallback? onRetry;
+
+  /// 头像点击回调
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -63,14 +84,26 @@ class FileMessageBubble extends StatelessWidget {
       child: Row(
         mainAxisAlignment:
             isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 左侧头像（接收的消息）
+          if (showAvatar && !isSentByMe) ...[
+            GestureDetector(
+              onTap: onAvatarTap,
+              child: ImAvatar.small(
+                userId: senderId ?? '',
+                name: senderName,
+                avatarUrl: senderAvatar,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           // 发送失败图标
           if (isSentByMe && status == MessageDisplayStatus.failed)
             GestureDetector(
               onTap: onRetry,
               child: Padding(
-                padding: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.only(right: 8, top: 8),
                 child: Icon(
                   Icons.error_outline,
                   size: 18,
@@ -79,54 +112,68 @@ class FileMessageBubble extends StatelessWidget {
               ),
             ),
           // 文件气泡
-          GestureDetector(
-            onTap: onTap,
-            onLongPress: onLongPress,
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 240),
-              padding: const EdgeInsets.all(12),
-              decoration: MessageStyles.bubble(
-                isSentByMe
-                    ? colors.messageBubbleSent
-                    : colors.messageBubbleReceived,
-                radius: isSentByMe
-                    ? MessageStyles.bubbleRadiusSent
-                    : MessageStyles.bubbleRadiusReceived,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 文件图标
-                  _buildFileIcon(colors),
-                  const SizedBox(width: 12),
-                  // 文件信息
-                  Flexible(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 文件名
-                        Text(
-                          fileName,
-                          style: TextStyle(
-                            color: isSentByMe
-                                ? Colors.black87
-                                : colors.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+          Flexible(
+            child: GestureDetector(
+              onTap: onTap,
+              onLongPress: onLongPress,
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 240),
+                padding: const EdgeInsets.all(12),
+                decoration: MessageStyles.bubble(
+                  isSentByMe
+                      ? colors.messageBubbleSent
+                      : colors.messageBubbleReceived,
+                  radius: isSentByMe
+                      ? MessageStyles.bubbleRadiusSent
+                      : MessageStyles.bubbleRadiusReceived,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 文件图标
+                    _buildFileIcon(colors),
+                    const SizedBox(width: 12),
+                    // 文件信息
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 文件名
+                          Text(
+                            fileName,
+                            style: TextStyle(
+                              color: isSentByMe
+                                  ? Colors.black87
+                                  : colors.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        // 文件大小和状态
-                        _buildSubtitle(colors),
-                      ],
+                          const SizedBox(height: 4),
+                          // 文件大小和状态
+                          _buildSubtitle(colors),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
+          // 右侧头像（自己发送的消息）
+          if (showAvatar && isSentByMe) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onAvatarTap,
+              child: ImAvatar.small(
+                userId: senderId ?? '',
+                name: senderName,
+                avatarUrl: senderAvatar,
+              ),
+            ),
+          ],
         ],
       ),
     );

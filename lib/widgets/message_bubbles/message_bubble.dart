@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/im_design_tokens.dart';
 import '../../theme/message_styles.dart';
+import '../im_avatar.dart';
 
 /// 消息状态
 enum MessageDisplayStatus {
@@ -20,10 +21,15 @@ class MessageBubble extends StatelessWidget {
     required this.timestamp,
     required this.isSentByMe,
     this.status,
+    this.senderId,
     this.senderName,
+    this.senderAvatar,
     this.showSenderName = false,
+    this.showAvatar = false,
     this.onLongPress,
     this.onTap,
+    this.onRetry,
+    this.onAvatarTap,
   });
 
   /// 消息内容
@@ -38,17 +44,32 @@ class MessageBubble extends StatelessWidget {
   /// 消息状态
   final MessageDisplayStatus? status;
 
+  /// 发送者 ID（用于头像占位符颜色）
+  final String? senderId;
+
   /// 发送者名称（群聊时显示）
   final String? senderName;
 
+  /// 发送者头像 URL
+  final String? senderAvatar;
+
   /// 是否显示发送者名称
   final bool showSenderName;
+
+  /// 是否显示头像
+  final bool showAvatar;
 
   /// 长按回调
   final VoidCallback? onLongPress;
 
   /// 点击回调
   final VoidCallback? onTap;
+
+  /// 重试回调
+  final VoidCallback? onRetry;
+
+  /// 头像点击回调
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -59,62 +80,91 @@ class MessageBubble extends StatelessWidget {
       child: Row(
         mainAxisAlignment:
             isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 左侧头像（接收的消息）
+          if (showAvatar && !isSentByMe) ...[
+            GestureDetector(
+              onTap: onAvatarTap,
+              child: ImAvatar.small(
+                userId: senderId ?? '',
+                name: senderName,
+                avatarUrl: senderAvatar,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           // 发送失败图标（自己发送的消息，显示在左侧）
           if (isSentByMe && status == MessageDisplayStatus.failed)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Icon(
-                Icons.error_outline,
-                size: 18,
-                color: colors.error,
+            GestureDetector(
+              onTap: onRetry,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8, top: 8),
+                child: Icon(
+                  Icons.error_outline,
+                  size: 18,
+                  color: colors.error,
+                ),
               ),
             ),
           // 消息气泡
-          GestureDetector(
-            onLongPress: onLongPress,
-            onTap: onTap,
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.7,
-              ),
-              padding: MessageStyles.bubblePadding,
-              decoration: MessageStyles.bubble(
-                isSentByMe
-                    ? colors.messageBubbleSent
-                    : colors.messageBubbleReceived,
-                radius: isSentByMe
-                    ? MessageStyles.bubbleRadiusSent
-                    : MessageStyles.bubbleRadiusReceived,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 发送者名称（群聊时显示）
-                  if (showSenderName && senderName != null && !isSentByMe)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        senderName!,
-                        style: MessageStyles.senderName(colors.primary),
+          Flexible(
+            child: GestureDetector(
+              onLongPress: onLongPress,
+              onTap: onTap,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.65,
+                ),
+                padding: MessageStyles.bubblePadding,
+                decoration: MessageStyles.bubble(
+                  isSentByMe
+                      ? colors.messageBubbleSent
+                      : colors.messageBubbleReceived,
+                  radius: isSentByMe
+                      ? MessageStyles.bubbleRadiusSent
+                      : MessageStyles.bubbleRadiusReceived,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 发送者名称（群聊时显示）
+                    if (showSenderName && senderName != null && !isSentByMe)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          senderName!,
+                          style: MessageStyles.senderName(colors.primary),
+                        ),
+                      ),
+                    // 消息内容
+                    Text(
+                      body,
+                      style: TextStyle(
+                        color: isSentByMe ? Colors.black87 : colors.textPrimary,
+                        fontSize: 15,
                       ),
                     ),
-                  // 消息内容
-                  Text(
-                    body,
-                    style: TextStyle(
-                      color: isSentByMe ? Colors.black87 : colors.textPrimary,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  // 时间和状态
-                  _buildFooter(colors),
-                ],
+                    const SizedBox(height: 4),
+                    // 时间和状态
+                    _buildFooter(colors),
+                  ],
+                ),
               ),
             ),
           ),
+          // 右侧头像（自己发送的消息）
+          if (showAvatar && isSentByMe) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onAvatarTap,
+              child: ImAvatar.small(
+                userId: senderId ?? '',
+                name: senderName,
+                avatarUrl: senderAvatar,
+              ),
+            ),
+          ],
         ],
       ),
     );

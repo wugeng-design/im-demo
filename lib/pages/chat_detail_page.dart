@@ -31,10 +31,43 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   final _scrollController = ScrollController();
   final _inputKey = GlobalKey<MessageInputAreaState>();
 
+  /// 触发加载更多的滚动阈值（距离顶部多少像素）
+  static const double _loadMoreThreshold = 100.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+  }
+
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// 滚动监听：到达顶部时加载更多历史
+  void _onScroll() {
+    if (_scrollController.position.pixels <= _loadMoreThreshold) {
+      _loadMoreHistory();
+    }
+  }
+
+  /// 加载更多历史消息
+  Future<void> _loadMoreHistory() async {
+    final notifier = ref.read(messagesProvider(widget.conversationId).notifier);
+    if (!notifier.hasMoreHistory || notifier.isLoadingHistory) {
+      return;
+    }
+    await notifier.loadMoreHistory();
+  }
+
+  /// 下拉刷新
+  Future<void> _onRefresh() async {
+    await ref
+        .read(messagesProvider(widget.conversationId).notifier)
+        .refreshFromServer();
   }
 
   void _scrollToBottom() {
@@ -139,47 +172,119 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   }
 
   Widget _buildEmptyState(ImColorScheme colors) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.chat_bubble_outline, size: 48, color: colors.textTertiary),
-          const SizedBox(height: 16),
-          Text(
-            '暂无消息',
-            style: TextStyle(color: colors.textSecondary),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '发送消息开始聊天吧',
-            style: TextStyle(color: colors.textTertiary, fontSize: 13),
-          ),
-        ],
+    // 空状态也支持下拉刷新
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.chat_bubble_outline, size: 48, color: colors.textTertiary),
+                    const SizedBox(height: 16),
+                    Text(
+                      '暂无消息',
+                      style: TextStyle(color: colors.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '发送消息开始聊天吧',
+                      style: TextStyle(color: colors.textTertiary, fontSize: 13),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      '下拉刷新',
+                      style: TextStyle(color: colors.textTertiary, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildMessageList(List<Message> messages, ImColorScheme colors) {
-    return ListView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      itemCount: messages.length,
-      itemBuilder: (context, index) {
-        final message = messages[index];
-        final showTime = index == 0 ||
-            messages[index]
-                    .timestamp
-                    .difference(messages[index - 1].timestamp)
-                    .inMinutes >
-                5;
+    final notifier = ref.watch(messagesProvider(widget.conversationId).notifier);
+    final hasMore = notifier.hasMoreHistory;
+    final isLoading = notifier.isLoadingHistory;
 
-        return Column(
-          children: [
-            if (showTime) _buildTimeHeader(message.timestamp, colors),
-            _buildMessageBubble(message, colors),
-          ],
-        );
-      },
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      child: ListView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        // 增加一项用于显示加载更多指示器
+        itemCount: messages.length + (hasMore || isLoading ? 1 : 0),
+        itemBuilder: (context, index) {
+          // 第一项：加载更多指示器
+          if (hasMore || isLoading) {
+            if (index == 0) {
+              return _buildLoadMoreIndicator(colors, isLoading, hasMore);
+            }
+            // 其他项索引减一
+            index = index - 1;
+          }
+
+          final message = messages[index];
+          final showTime = index == 0 ||
+              messages[index]
+                      .timestamp
+                      .difference(messages[index - 1].timestamp)
+                      .inMinutes >
+                  5;
+
+          return Column(
+            children: [
+              if (showTime) _buildTimeHeader(message.timestamp, colors),
+              _buildMessageBubble(message, colors),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// 构建加载更多指示器
+  Widget _buildLoadMoreIndicator(ImColorScheme colors, bool isLoading, bool hasMore) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      alignment: Alignment.center,
+      child: isLoading
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colors.textTertiary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '加载中...',
+                  style: TextStyle(color: colors.textTertiary, fontSize: 12),
+                ),
+              ],
+            )
+          : hasMore
+              ? GestureDetector(
+                  onTap: _loadMoreHistory,
+                  child: Text(
+                    '上滑加载更多历史消息',
+                    style: TextStyle(color: colors.textTertiary, fontSize: 12),
+                  ),
+                )
+              : const SizedBox.shrink(),
     );
   }
 

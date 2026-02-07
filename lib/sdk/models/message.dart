@@ -17,6 +17,7 @@ class Message {
   final String conversationId;
   final String senderId;
   final String senderName;
+  final String? senderAvatar;
   final String body;
   final DateTime timestamp;
   final bool isMe;
@@ -29,6 +30,7 @@ class Message {
     required this.conversationId,
     required this.senderId,
     required this.senderName,
+    this.senderAvatar,
     required this.body,
     required this.timestamp,
     this.isMe = false,
@@ -65,6 +67,7 @@ class Message {
     String? conversationId,
     String? senderId,
     String? senderName,
+    String? senderAvatar,
     String? body,
     DateTime? timestamp,
     bool? isMe,
@@ -77,6 +80,7 @@ class Message {
       conversationId: conversationId ?? this.conversationId,
       senderId: senderId ?? this.senderId,
       senderName: senderName ?? this.senderName,
+      senderAvatar: senderAvatar ?? this.senderAvatar,
       body: body ?? this.body,
       timestamp: timestamp ?? this.timestamp,
       isMe: isMe ?? this.isMe,
@@ -93,6 +97,7 @@ class Message {
       conversationId: json['conversationId'] as String,
       senderId: json['senderId'] as String,
       senderName: json['senderName'] as String,
+      senderAvatar: json['senderAvatar'] as String?,
       body: json['body'] as String,
       timestamp: DateTime.parse(json['timestamp'] as String),
       isMe: json['isMe'] as bool? ?? false,
@@ -114,6 +119,7 @@ class Message {
       'conversationId': conversationId,
       'senderId': senderId,
       'senderName': senderName,
+      'senderAvatar': senderAvatar,
       'body': body,
       'timestamp': timestamp.toIso8601String(),
       'isMe': isMe,

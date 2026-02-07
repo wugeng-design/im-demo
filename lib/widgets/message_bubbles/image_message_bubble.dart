@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/im_design_tokens.dart';
 import '../../theme/message_styles.dart';
+import '../im_avatar.dart';
 import 'message_bubble.dart';
 
 /// 图片消息气泡
@@ -17,9 +18,14 @@ class ImageMessageBubble extends StatelessWidget {
     this.height,
     this.status,
     this.uploadProgress,
+    this.senderId,
+    this.senderName,
+    this.senderAvatar,
+    this.showAvatar = false,
     this.onTap,
     this.onLongPress,
     this.onRetry,
+    this.onAvatarTap,
   });
 
   /// 是否是自己发送的
@@ -43,6 +49,18 @@ class ImageMessageBubble extends StatelessWidget {
   /// 上传进度 (0.0 - 1.0)
   final double? uploadProgress;
 
+  /// 发送者 ID（用于头像占位符颜色）
+  final String? senderId;
+
+  /// 发送者名称
+  final String? senderName;
+
+  /// 发送者头像 URL
+  final String? senderAvatar;
+
+  /// 是否显示头像
+  final bool showAvatar;
+
   /// 点击回调
   final VoidCallback? onTap;
 
@@ -51,6 +69,9 @@ class ImageMessageBubble extends StatelessWidget {
 
   /// 重试回调
   final VoidCallback? onRetry;
+
+  /// 头像点击回调
+  final VoidCallback? onAvatarTap;
 
   /// 默认尺寸
   static const double _defaultSize = 180.0;
@@ -69,14 +90,26 @@ class ImageMessageBubble extends StatelessWidget {
       child: Row(
         mainAxisAlignment:
             isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 左侧头像（接收的消息）
+          if (showAvatar && !isSentByMe) ...[
+            GestureDetector(
+              onTap: onAvatarTap,
+              child: ImAvatar.small(
+                userId: senderId ?? '',
+                name: senderName,
+                avatarUrl: senderAvatar,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           // 发送失败图标
           if (isSentByMe && status == MessageDisplayStatus.failed)
             GestureDetector(
               onTap: onRetry,
               child: Padding(
-                padding: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.only(right: 8, top: 8),
                 child: Icon(
                   Icons.error_outline,
                   size: 18,
@@ -111,6 +144,18 @@ class ImageMessageBubble extends StatelessWidget {
               ),
             ),
           ),
+          // 右侧头像（自己发送的消息）
+          if (showAvatar && isSentByMe) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: onAvatarTap,
+              child: ImAvatar.small(
+                userId: senderId ?? '',
+                name: senderName,
+                avatarUrl: senderAvatar,
+              ),
+            ),
+          ],
         ],
       ),
     );

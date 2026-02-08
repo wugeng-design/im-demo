@@ -651,16 +651,27 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           // 多选模式工具栏
           if (_isSelectionMode)
             _buildSelectionToolbar(colors)
-          // 编辑/回复指示栏
-          else if (_editingMessage != null || _replyingMessage != null)
-            _buildEditReplyBar(colors)
-          // 输入区域
-          else if (isConnected)
+          // 编辑/回复模式：显示指示栏 + 输入框
+          else if (_editingMessage != null || _replyingMessage != null) ...[
+            _buildEditReplyBar(colors),
             MessageInputArea(
               key: _inputKey,
               onSend: _editingMessage != null
                   ? _submitEdit
                   : _sendTextMessage,
+              initialText: _initialDraft,
+              onTextChanged: _onInputTextChanged,
+              onImageSelected: _onImageSelected,
+              onMultipleImagesSelected: _onMultipleImagesSelected,
+              onVideoSelected: _onVideoSelected,
+              onFileSelected: _onFileSelected,
+            ),
+          ]
+          // 普通输入区域
+          else if (isConnected)
+            MessageInputArea(
+              key: _inputKey,
+              onSend: _sendTextMessage,
               initialText: _initialDraft,
               onTextChanged: _onInputTextChanged,
               onImageSelected: _onImageSelected,

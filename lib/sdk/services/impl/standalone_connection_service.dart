@@ -87,6 +87,9 @@ class StandaloneConnectionService implements ImConnectionService {
   final AppLifecycleService _lifecycleService = AppLifecycleService();
   StreamSubscription<AppLifecycleEvent>? _lifecycleSubscription;
 
+  /// 已加入的群聊房间（用于自动重新加入）
+  final Set<String> _joinedRooms = {};
+
   /// App 后台时长阈值（超过此时长需要验证连接）
   static const Duration _backgroundThreshold = Duration(seconds: 30);
 
@@ -208,6 +211,9 @@ class StandaloneConnectionService implements ImConnectionService {
 
   @override
   String? get currentJid => _currentJid;
+
+  /// 获取保存的配置（用于其他服务获取服务器地址）
+  ImSdkConfig? get savedConfig => _savedConfig;
 
   @override
   bool get isConnected => _currentState == ImConnectionState.authenticated;
@@ -372,6 +378,12 @@ class StandaloneConnectionService implements ImConnectionService {
       // 监听收到的消息
       _whixp!.addEventHandler<Message?>('message', (message) {
         if (message == null) return;
+        // 忽略错误类型的消息
+        if (message.type == 'error') {
+          print('[Whixp] Ignoring error message: ${message.body}');
+          return;
+        }
+
         final body = message.body;
         if (body != null && body.isNotEmpty) {
           // 详细日志：检查 from 字段
@@ -467,6 +479,15 @@ class StandaloneConnectionService implements ImConnectionService {
       throw StateError('Not connected');
     }
 
+    // 如果是群聊消息且未加入房间，先自动加入
+    if (isGroupChat && !_joinedRooms.contains(toJid)) {
+      final nickname = _currentJid?.split('@').first ?? 'user';
+      print('[MUC] Auto-joining room before sending: $toJid');
+      await joinRoom(toJid, nickname);
+      // 等待一小段时间让加入完成
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+
     _whixp!.sendMessage(
       JabberID(toJid),
       body: body,
@@ -495,6 +516,10 @@ class StandaloneConnectionService implements ImConnectionService {
     // MUC join 需要发送特定的 presence
     final mucJid = '$roomJid/$nickname';
     _whixp!.sendPresence(to: JabberID(mucJid));
+
+    // 记录已加入的房间
+    _joinedRooms.add(roomJid);
+    print('[MUC] Joined room: $roomJid as $nickname');
   }
 
   @override
@@ -506,6 +531,10 @@ class StandaloneConnectionService implements ImConnectionService {
       to: JabberID(mucJid),
       type: 'unavailable',
     );
+
+    // 从已加入列表中移除
+    _joinedRooms.remove(roomJid);
+    print('[MUC] Left room: $roomJid');
   }
 
   /// 创建 MUC 群聊房间

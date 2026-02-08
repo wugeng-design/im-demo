@@ -7,7 +7,9 @@ import '../sdk/models/conversation.dart';
 import '../sdk/models/message.dart';
 import '../sdk/models/contact.dart';
 import '../sdk/services/impl/standalone_connection_service.dart';
+import '../sdk/services/impl/http_upload_service.dart';
 import '../sdk/services/im_connection_service.dart';
+import '../sdk/services/media_upload_service.dart';
 import '../sdk/services/reconnect_manager.dart';
 import '../sdk/services/typing_indicator_service.dart';
 
@@ -27,6 +29,23 @@ final repositoryProvider = Provider<ImRepository>((ref) {
 /// IM 连接服务 Provider
 final imConnectionServiceProvider = Provider<StandaloneConnectionService>((ref) {
   final service = StandaloneConnectionService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+
+/// 媒体上传服务 Provider
+///
+/// 根据连接服务的配置自动创建上传服务
+final mediaUploadServiceProvider = Provider<MediaUploadService>((ref) {
+  final connectionService = ref.watch(imConnectionServiceProvider);
+  final config = connectionService.savedConfig;
+
+  // 使用 ejabberd HTTP Upload 服务
+  // 上传 URL 格式: http://host:5443/upload/localhost
+  final host = config?.host ?? 'localhost';
+  final uploadUrl = 'http://$host:5443/upload/localhost';
+
+  final service = HttpUploadService(uploadBaseUrl: uploadUrl);
   ref.onDispose(() => service.dispose());
   return service;
 });
@@ -177,15 +196,21 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
 
     final repository = ref.read(repositoryProvider);
 
+    // 解析媒体消息格式: [TYPE:filename]url
+    final parsedMedia = _parseMediaMessage(body);
+    final messageType = parsedMedia?.type ?? MessageType.text;
+    final displayBody = parsedMedia?.url ?? body;
+
     // 保存消息到数据库
     final msg = Message(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       conversationId: conversationId,
       senderId: senderId,
       senderName: senderName,
-      body: body,
+      body: displayBody,
       timestamp: message.timestamp,
       isMe: isMe,
+      messageType: messageType,
     );
     await repository.saveMessage(msg);
 
@@ -199,8 +224,16 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       ),
     );
 
+    // 会话列表显示友好文本
+    final lastMessageText = switch (messageType) {
+      MessageType.image => '[图片]',
+      MessageType.video => '[视频]',
+      MessageType.file => '[文件]',
+      _ => body,
+    };
+
     final updated = existing.copyWith(
-      lastMessage: body,
+      lastMessage: lastMessageText,
       lastMessageTime: message.timestamp,
       unreadCount: existing.unreadCount + 1,
     );
@@ -268,6 +301,30 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       return name;
     }
     return local.isNotEmpty ? local : '群聊';
+  }
+
+  /// 解析媒体消息格式: [TYPE:filename]url
+  ///
+  /// 返回解析结果，如果不是媒体消息则返回 null
+  _ParsedMediaMessage? _parseMediaMessage(String body) {
+    // 匹配格式: [IMG:filename]url 或 [VIDEO:filename]url 或 [FILE:filename]url
+    final regex = RegExp(r'^\[(IMG|VIDEO|FILE):([^\]]+)\](.+)$');
+    final match = regex.firstMatch(body);
+
+    if (match == null) return null;
+
+    final typeTag = match.group(1)!;
+    final fileName = match.group(2)!;
+    final url = match.group(3)!;
+
+    final type = switch (typeTag) {
+      'IMG' => MessageType.image,
+      'VIDEO' => MessageType.video,
+      'FILE' => MessageType.file,
+      _ => MessageType.text,
+    };
+
+    return _ParsedMediaMessage(type: type, fileName: fileName, url: url);
   }
 
   Future<void> _autoJoinRoom(String roomJid) async {
@@ -642,3 +699,16 @@ final contactsProvider = FutureProvider<List<Contact>>((ref) async {
     return [];
   }
 });
+
+/// 解析后的媒体消息
+class _ParsedMediaMessage {
+  final MessageType type;
+  final String fileName;
+  final String url;
+
+  _ParsedMediaMessage({
+    required this.type,
+    required this.fileName,
+    required this.url,
+  });
+}

@@ -26,6 +26,9 @@ enum MessageMenuAction {
 
   /// 回复/引用
   reply,
+
+  /// 多选
+  multiSelect,
 }
 
 /// 消息操作菜单项
@@ -132,6 +135,15 @@ class MessageLongPressMenu {
         action: MessageMenuAction.recall,
         icon: Icons.undo,
         label: '撤回',
+      ));
+    }
+
+    // 多选
+    if (!isSending && !isFailed) {
+      items.add(const _MenuItem(
+        action: MessageMenuAction.multiSelect,
+        icon: Icons.checklist,
+        label: '多选',
       ));
     }
 

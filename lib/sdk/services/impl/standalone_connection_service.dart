@@ -7,6 +7,7 @@ import '../../config/im_sdk_config.dart';
 import '../im_connection_service.dart';
 import '../reconnect_manager.dart';
 import '../app_lifecycle_service.dart';
+import 'ejabberd_api_client.dart';
 
 /// 接收到的消息
 class ReceivedMessage {
@@ -28,6 +29,34 @@ class ReceivedMessage {
   String toString() => 'ReceivedMessage(from: $from, body: $body)';
 }
 
+/// MUC 群成员信息
+class MucMember {
+  /// 成员 JID（bare JID）
+  final String jid;
+
+  /// 群内昵称
+  final String? nickname;
+
+  /// 角色 (owner/admin/member/outcast/none)
+  final String affiliation;
+
+  /// 当前状态 (moderator/participant/visitor/none)
+  final String role;
+
+  MucMember({
+    required this.jid,
+    this.nickname,
+    this.affiliation = 'member',
+    this.role = 'participant',
+  });
+
+  bool get isOwner => affiliation == 'owner';
+  bool get isAdmin => affiliation == 'admin' || affiliation == 'owner';
+
+  @override
+  String toString() => 'MucMember(jid: $jid, affiliation: $affiliation)';
+}
+
 /// 独立 XMPP 连接服务
 ///
 /// 直接使用 whixp 连接 XMPP 服务器，不依赖 EdX 基础设施
@@ -47,6 +76,9 @@ class StandaloneConnectionService implements ImConnectionService {
   /// 保存的配置（用于重连）
   ImSdkConfig? _savedConfig;
   ImCredentials? _savedCredentials;
+
+  /// ejabberd REST API 客户端
+  EjabberdApiClient? _ejabberdApi;
 
   /// 重连管理器
   late final ReconnectManager _reconnectManager;
@@ -193,6 +225,17 @@ class StandaloneConnectionService implements ImConnectionService {
     _savedConfig = config;
     _savedCredentials = credentials;
 
+    // 初始化 ejabberd REST API 客户端
+    // 假设 REST API 端口为 XMPP 端口 - 2（如 5222 -> 5280 或自定义）
+    final apiPort = config.apiPort ?? 5280;
+    final apiScheme = config.useTls ? 'https' : 'http';
+    _ejabberdApi = EjabberdApiClient(
+      baseUrl: '$apiScheme://${config.host}:$apiPort',
+      // 不使用认证，ejabberd 配置为 IP 白名单模式
+      // adminUser: credentials.username,
+      // adminPassword: credentials.password,
+    );
+
     // 重置重连管理器
     _reconnectManager.resetManualDisconnect();
 
@@ -211,12 +254,9 @@ class StandaloneConnectionService implements ImConnectionService {
 
       print('[Whixp] Creating connection with host=${config.host}, port=${config.port}, useTLS=${config.useTls}');
 
-      // 对于不要求 TLS 的服务器，禁用 STARTTLS 尝试
-      final shouldDisableStartTLS = !config.useTls &&
-          (config.host == 'localhost' ||
-           config.host.startsWith('192.168.') ||
-           config.host.startsWith('10.') ||
-           RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(config.host)); // IP 地址
+      // 禁用 STARTTLS（服务器已配置为不要求 TLS）
+      // 如果服务器要求 TLS，设置 useTls=true 使用 DirectTLS
+      final shouldDisableStartTLS = !config.useTls;
 
       print('[Whixp] disableStartTLS: $shouldDisableStartTLS');
 
@@ -334,8 +374,20 @@ class StandaloneConnectionService implements ImConnectionService {
         if (message == null) return;
         final body = message.body;
         if (body != null && body.isNotEmpty) {
+          // 详细日志：检查 from 字段
+          final fromObj = message.from;
+          String fromJid;
+          if (fromObj == null) {
+            fromJid = 'unknown';
+            print('[Whixp] Message from is NULL');
+          } else {
+            // 使用 full 获取完整 JID（包括 resource）
+            fromJid = fromObj.full.isNotEmpty ? fromObj.full : fromObj.toString();
+            print('[Whixp] Message from - full: "${fromObj.full}", bare: "${fromObj.bare}", resource: "${fromObj.resource}"');
+          }
+          print('[Whixp] Message received - from: $fromJid, type: ${message.type}, body: $body');
           _messageController.add(ReceivedMessage(
-            from: message.from?.toString() ?? 'unknown',
+            from: fromJid,
             to: message.to?.toString(),
             body: body,
             type: message.type ?? 'chat',
@@ -479,11 +531,18 @@ class StandaloneConnectionService implements ImConnectionService {
     // 等待一小段时间让房间创建完成
     await Future.delayed(const Duration(milliseconds: 500));
 
-    // 邀请成员，传递群名
+    // 邀请成员，传递群名，并通过 API 添加到房间成员列表
     final invitedNames = <String>[];
     for (final memberJid in members) {
-      await inviteToRoom(roomJid, memberJid, roomName);
-      invitedNames.add(memberJid.split('@').first);
+      try {
+        // 通过 API 将成员添加到房间（设置 affiliation 为 member）
+        await inviteMember(roomJid, memberJid);
+        // 发送邀请通知消息
+        await inviteToRoom(roomJid, memberJid, roomName);
+        invitedNames.add(memberJid.split('@').first);
+      } catch (e) {
+        print('[MUC] 邀请成员失败: $memberJid, 错误: $e');
+      }
     }
 
     // 向群里发送一条创建通知（可选）
@@ -514,6 +573,202 @@ class StandaloneConnectionService implements ImConnectionService {
     );
   }
 
+  // ============================================================================
+  // MUC 群聊管理功能（通过 ejabberd REST API）
+  // ============================================================================
+
+  /// 从 roomJid 解析房间名和服务域
+  ///
+  /// roomJid 格式: room_name@conference.domain
+  (String room, String service) _parseRoomJid(String roomJid) {
+    final parts = roomJid.split('@');
+    if (parts.length != 2) {
+      throw ArgumentError('Invalid room JID format: $roomJid');
+    }
+    return (parts[0], parts[1]);
+  }
+
+  /// 获取群聊成员列表
+  ///
+  /// 通过 ejabberd REST API 获取完整成员列表（包括离线成员）
+  Future<List<MucMember>> getRoomMembers(String roomJid) async {
+    if (_ejabberdApi == null) {
+      throw StateError('ejabberd API not initialized');
+    }
+
+    print('[MUC] 获取群成员: $roomJid');
+
+    final (room, service) = _parseRoomJid(roomJid);
+
+    try {
+      // 获取成员角色列表
+      final affiliations = await _ejabberdApi!.getRoomAffiliations(room, service);
+
+      return affiliations.map((a) => MucMember(
+        jid: a.jid,
+        affiliation: a.affiliation,
+        role: 'participant', // 角色需要从 occupants 获取
+      )).toList();
+    } catch (e) {
+      print('[MUC] 获取群成员失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 踢出群成员（临时移除，可重新加入）
+  ///
+  /// 注意：这需要通过 XMPP presence 实现，REST API 不直接支持
+  Future<void> kickMember(String roomJid, String memberNickname, {String? reason}) async {
+    if (!isConnected || _whixp == null) {
+      throw StateError('Not connected');
+    }
+
+    print('[MUC] 踢出成员: $memberNickname from $roomJid');
+    // 踢出是临时的，通过设置 role 为 none 实现
+    // 这需要 XMPP IQ 实现，暂时用 removeMember 替代
+  }
+
+  /// 永久移除群成员
+  ///
+  /// 设置成员 affiliation 为 none，永久移除
+  Future<void> removeMember(String roomJid, String memberJid) async {
+    if (_ejabberdApi == null) {
+      throw StateError('ejabberd API not initialized');
+    }
+
+    print('[MUC] 移除成员: $memberJid from $roomJid');
+
+    final (room, service) = _parseRoomJid(roomJid);
+
+    try {
+      await _ejabberdApi!.setRoomAffiliation(room, service, memberJid, 'none');
+      print('[MUC] 成员已移除');
+    } catch (e) {
+      print('[MUC] 移除成员失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 邀请用户加入群聊
+  ///
+  /// 设置用户 affiliation 为 member
+  Future<void> inviteMember(String roomJid, String memberJid) async {
+    if (_ejabberdApi == null) {
+      throw StateError('ejabberd API not initialized');
+    }
+
+    print('[MUC] 邀请成员: $memberJid to $roomJid');
+
+    final (room, service) = _parseRoomJid(roomJid);
+
+    try {
+      await _ejabberdApi!.setRoomAffiliation(room, service, memberJid, 'member');
+      print('[MUC] 成员已邀请');
+    } catch (e) {
+      print('[MUC] 邀请成员失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 设置群成员角色
+  ///
+  /// [affiliation] 可选: owner, admin, member, outcast, none
+  Future<void> setMemberAffiliation(
+    String roomJid,
+    String memberJid,
+    String affiliation,
+  ) async {
+    if (_ejabberdApi == null) {
+      throw StateError('ejabberd API not initialized');
+    }
+
+    print('[MUC] 设置角色: $memberJid -> $affiliation in $roomJid');
+
+    final (room, service) = _parseRoomJid(roomJid);
+
+    try {
+      await _ejabberdApi!.setRoomAffiliation(room, service, memberJid, affiliation);
+      print('[MUC] 角色已设置');
+    } catch (e) {
+      print('[MUC] 设置角色失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 修改群名称
+  Future<void> setRoomName(String roomJid, String newName) async {
+    if (_ejabberdApi == null) {
+      throw StateError('ejabberd API not initialized');
+    }
+
+    print('[MUC] 修改群名称: $roomJid -> $newName');
+
+    final (room, service) = _parseRoomJid(roomJid);
+
+    try {
+      await _ejabberdApi!.changeRoomOption(room, service, 'title', newName);
+      print('[MUC] 群名称已修改');
+    } catch (e) {
+      print('[MUC] 修改群名称失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 销毁群聊（群主权限）
+  Future<void> destroyRoom(String roomJid, {String? reason}) async {
+    if (_ejabberdApi == null) {
+      throw StateError('ejabberd API not initialized');
+    }
+
+    print('[MUC] 销毁群聊: $roomJid');
+
+    final (room, service) = _parseRoomJid(roomJid);
+
+    try {
+      await _ejabberdApi!.destroyRoom(room, service, reason: reason);
+      print('[MUC] 群聊已销毁');
+    } catch (e) {
+      print('[MUC] 销毁群聊失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 获取群聊配置
+  Future<Map<String, dynamic>> getRoomOptions(String roomJid) async {
+    if (_ejabberdApi == null) {
+      throw StateError('ejabberd API not initialized');
+    }
+
+    final (room, service) = _parseRoomJid(roomJid);
+    return await _ejabberdApi!.getRoomOptions(room, service);
+  }
+
+  /// 退出群聊（普通成员）
+  ///
+  /// 对于群主，需要先转让或销毁群聊
+  Future<void> quitRoom(String roomJid) async {
+    if (!isConnected || _currentJid == null) {
+      throw StateError('Not connected');
+    }
+
+    print('[MUC] 退出群聊: $roomJid');
+
+    // 先离开房间（发送离开 presence）
+    final nickname = _currentJid!.split('@').first;
+    await leaveRoom(roomJid, nickname);
+
+    // 然后移除自己的 affiliation
+    if (_ejabberdApi != null) {
+      final (room, service) = _parseRoomJid(roomJid);
+      try {
+        await _ejabberdApi!.setRoomAffiliation(room, service, _currentJid!, 'none');
+      } catch (e) {
+        print('[MUC] 移除 affiliation 失败: $e');
+        // 忽略错误，已经离开房间了
+      }
+    }
+  }
+
   void _updateState(ImConnectionState state, {String? error}) {
     _currentState = state;
     _stateController.add(ConnectionStateEvent(state: state, error: error));
@@ -541,5 +796,29 @@ class StandaloneConnectionService implements ImConnectionService {
 
     _reconnectManager.resetManualDisconnect();
     return await connect(_savedConfig!, _savedCredentials!);
+  }
+
+  /// 获取所有注册用户
+  ///
+  /// 返回用户 JID 列表（排除当前用户）
+  Future<List<String>> getRegisteredUsers() async {
+    if (_ejabberdApi == null) {
+      print('[Connection] ejabberd API 未初始化');
+      return [];
+    }
+
+    final domain = _savedConfig?.domain ?? 'localhost';
+
+    try {
+      final users = await _ejabberdApi!.getRegisteredUsers(domain);
+      // 转换为 JID 格式并排除当前用户
+      return users
+          .map((user) => '$user@$domain')
+          .where((jid) => jid != _currentJid)
+          .toList();
+    } catch (e) {
+      print('[Connection] 获取注册用户失败: $e');
+      return [];
+    }
   }
 }

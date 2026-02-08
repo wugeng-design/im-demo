@@ -76,6 +76,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       port: int.tryParse(_portController.text) ?? 5222,
       domain: _domainController.text,
       useTls: _useTls,
+      apiPort: 5280,  // ejabberd REST API 端口
     );
 
     final credentials = ImCredentials(

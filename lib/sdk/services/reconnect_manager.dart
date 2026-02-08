@@ -99,7 +99,7 @@ class ReconnectManager {
     this.onMaxAttemptsReached,
     this.baseDelaySec = 2,
     this.maxDelaySec = 300, // 5 分钟
-    this.maxAttempts = 10,
+    this.maxAttempts = 3,
   });
 
   /// 当前状态

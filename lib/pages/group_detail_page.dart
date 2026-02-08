@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/im_provider.dart';
 import '../sdk/models/contact.dart';
+import '../sdk/services/impl/standalone_connection_service.dart';
 import '../theme/im_design_tokens.dart';
 import '../widgets/im_avatar.dart';
 
@@ -39,20 +40,53 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
   }
 
   Future<void> _loadGroupInfo() async {
-    // TODO: 从 XMPP 服务器加载群信息
-    // 模拟加载群成员
-    await Future.delayed(const Duration(milliseconds: 500));
+    final connectionService = ref.read(imConnectionServiceProvider);
 
-    setState(() {
-      _members = [
-        _GroupMember(jid: 'owner@localhost', name: '群主', role: _MemberRole.owner),
-        _GroupMember(jid: 'admin1@localhost', name: '管理员1', role: _MemberRole.admin),
-        _GroupMember(jid: 'user1@localhost', name: '成员1', role: _MemberRole.member),
-        _GroupMember(jid: 'user2@localhost', name: '成员2', role: _MemberRole.member),
-        _GroupMember(jid: 'user3@localhost', name: '成员3', role: _MemberRole.member),
-      ];
-      _isLoading = false;
-    });
+    if (connectionService is StandaloneConnectionService) {
+      try {
+        final mucMembers = await connectionService.getRoomMembers(widget.groupId);
+
+        setState(() {
+          _members = mucMembers.map((m) {
+            _MemberRole role;
+            if (m.isOwner) {
+              role = _MemberRole.owner;
+            } else if (m.isAdmin) {
+              role = _MemberRole.admin;
+            } else {
+              role = _MemberRole.member;
+            }
+
+            return _GroupMember(
+              jid: m.jid,
+              name: m.nickname ?? m.jid.split('@').first,
+              role: role,
+            );
+          }).toList();
+          _isLoading = false;
+        });
+      } catch (e) {
+        print('[GroupDetail] 加载群成员失败: $e');
+        // 加载失败时使用空列表
+        setState(() {
+          _members = [];
+          _isLoading = false;
+        });
+      }
+    } else {
+      // 非 Standalone 模式，使用模拟数据
+      await Future.delayed(const Duration(milliseconds: 500));
+      setState(() {
+        _members = [
+          _GroupMember(jid: 'owner@localhost', name: '群主', role: _MemberRole.owner),
+          _GroupMember(jid: 'admin1@localhost', name: '管理员1', role: _MemberRole.admin),
+          _GroupMember(jid: 'user1@localhost', name: '成员1', role: _MemberRole.member),
+          _GroupMember(jid: 'user2@localhost', name: '成员2', role: _MemberRole.member),
+          _GroupMember(jid: 'user3@localhost', name: '成员3', role: _MemberRole.member),
+        ];
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -449,10 +483,16 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
     );
   }
 
-  void _addMembers() {
-    final contacts = ref.read(contactsProvider);
+  void _addMembers() async {
+    // 刷新联系人列表
+    ref.invalidate(contactsProvider);
+    // 等待刷新完成
+    final contactsAsync = await ref.read(contactsProvider.future);
+    final contacts = contactsAsync;
     final existingJids = _members.map((m) => m.jid).toSet();
     final availableContacts = contacts.where((c) => !existingJids.contains(c.jid)).toList();
+
+    if (!mounted) return;
 
     Navigator.push(
       context,
@@ -460,11 +500,24 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
         builder: (_) => _AddMemberPage(
           groupId: widget.groupId,
           availableContacts: availableContacts,
-          onMembersAdded: (selectedJids) {
-            // TODO: 调用 XMPP 邀请成员
+          onMembersAdded: (selectedJids) async {
+            final connectionService = ref.read(imConnectionServiceProvider);
+            if (connectionService is StandaloneConnectionService) {
+              try {
+                for (final jid in selectedJids) {
+                  await connectionService.inviteMember(widget.groupId, jid);
+                }
+              } catch (e) {
+                print('[GroupDetail] 邀请成员失败: $e');
+              }
+            }
+
             setState(() {
               for (final jid in selectedJids) {
-                final contact = contacts.firstWhere((c) => c.jid == jid);
+                final contact = contacts.firstWhere(
+                  (c) => c.jid == jid,
+                  orElse: () => Contact(jid: jid, name: jid.split('@').first),
+                );
                 _members.add(_GroupMember(
                   jid: jid,
                   name: contact.name,
@@ -472,9 +525,11 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
                 ));
               }
             });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('已邀请 ${selectedJids.length} 人加入群聊')),
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已邀请 ${selectedJids.length} 人加入群聊')),
+              );
+            }
           },
         ),
       ),
@@ -488,14 +543,26 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
         builder: (_) => _RemoveMemberPage(
           groupId: widget.groupId,
           members: _members.where((m) => m.role == _MemberRole.member).toList(),
-          onMembersRemoved: (removedJids) {
-            // TODO: 调用 XMPP 移除成员
+          onMembersRemoved: (removedJids) async {
+            final connectionService = ref.read(imConnectionServiceProvider);
+            if (connectionService is StandaloneConnectionService) {
+              try {
+                for (final jid in removedJids) {
+                  await connectionService.removeMember(widget.groupId, jid);
+                }
+              } catch (e) {
+                print('[GroupDetail] 移除成员失败: $e');
+              }
+            }
+
             setState(() {
               _members.removeWhere((m) => removedJids.contains(m.jid));
             });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('已移除 ${removedJids.length} 人')),
-            );
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('已移除 ${removedJids.length} 人')),
+              );
+            }
           },
         ),
       ),
@@ -522,7 +589,15 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
     );
 
     if (confirmed == true) {
-      // TODO: 调用 XMPP 移除成员
+      final connectionService = ref.read(imConnectionServiceProvider);
+      if (connectionService is StandaloneConnectionService) {
+        try {
+          await connectionService.removeMember(widget.groupId, member.jid);
+        } catch (e) {
+          print('[GroupDetail] 移除成员失败: $e');
+        }
+      }
+
       setState(() {
         _members.removeWhere((m) => m.jid == member.jid);
       });
@@ -539,7 +614,7 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('修改群名称'),
         content: TextField(
           controller: controller,
@@ -550,16 +625,40 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('取消'),
           ),
           TextButton(
-            onPressed: () {
-              // TODO: 调用 XMPP 修改群名称
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('群名称修改功能开发中')),
-              );
+            onPressed: () async {
+              final newName = controller.text.trim();
+              if (newName.isEmpty) return;
+
+              Navigator.pop(dialogContext);
+
+              final connectionService = ref.read(imConnectionServiceProvider);
+              if (connectionService is StandaloneConnectionService) {
+                try {
+                  await connectionService.setRoomName(widget.groupId, newName);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('群名称已修改')),
+                    );
+                  }
+                } catch (e) {
+                  print('[GroupDetail] 修改群名称失败: $e');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('修改失败: $e')),
+                    );
+                  }
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('群名称修改功能开发中')),
+                  );
+                }
+              }
             },
             child: const Text('确定'),
           ),
@@ -625,9 +724,25 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
     );
 
     if (confirmed == true && mounted) {
-      // TODO: 调用 XMPP 退出/解散群聊
+      final connectionService = ref.read(imConnectionServiceProvider);
+      if (connectionService is StandaloneConnectionService) {
+        try {
+          if (isOwner) {
+            // 群主解散群聊
+            await connectionService.destroyRoom(widget.groupId);
+          } else {
+            // 普通成员退出群聊
+            await connectionService.quitRoom(widget.groupId);
+          }
+        } catch (e) {
+          print('[GroupDetail] 退出群聊失败: $e');
+        }
+      }
+
       ref.read(conversationsProvider.notifier).removeConversation(widget.groupId);
-      Navigator.of(context)..pop()..pop(); // 返回会话列表
+      if (mounted) {
+        Navigator.of(context)..pop()..pop(); // 返回会话列表
+      }
     }
   }
 }

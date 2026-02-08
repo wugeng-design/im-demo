@@ -17,6 +17,7 @@ class Conversations extends Table {
   BoolColumn get isGroup => boolean().withDefault(const Constant(false))();
   BoolColumn get isPinned => boolean().withDefault(const Constant(false))();
   TextColumn get avatar => text().nullable()();
+  TextColumn get draft => text().nullable()(); // 草稿内容
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
@@ -61,7 +62,20 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (Migrator m) async {
+      await m.createAll();
+    },
+    onUpgrade: (Migrator m, int from, int to) async {
+      if (from < 2) {
+        // 添加 draft 字段
+        await m.addColumn(conversations, conversations.draft);
+      }
+    },
+  );
 
   // ===== 会话操作 =====
 
@@ -194,6 +208,64 @@ class AppDatabase extends _$AppDatabase {
   Future<void> updateMessageStatus(String messageId, String status) {
     return (update(messages)..where((t) => t.id.equals(messageId)))
         .write(MessagesCompanion(status: Value(status)));
+  }
+
+  /// 搜索消息
+  ///
+  /// [keyword] 搜索关键词
+  /// [conversationId] 可选，限定在某个会话内搜索
+  /// [limit] 最大返回数量
+  Future<List<Message>> searchMessages(
+    String keyword, {
+    String? conversationId,
+    int limit = 100,
+  }) {
+    final query = select(messages)
+      ..where((t) => t.body.like('%$keyword%'))
+      ..orderBy([(t) => OrderingTerm.desc(t.timestamp)])
+      ..limit(limit);
+
+    if (conversationId != null) {
+      query.where((t) => t.conversationId.equals(conversationId));
+    }
+
+    return query.get();
+  }
+
+  /// 更新消息内容（用于编辑消息）
+  Future<void> updateMessageBody(String messageId, String newBody) {
+    return (update(messages)..where((t) => t.id.equals(messageId)))
+        .write(MessagesCompanion(
+      body: Value(newBody),
+      extra: Value('edited'),  // 标记为已编辑
+    ));
+  }
+
+  // ===== 草稿操作 =====
+
+  /// 保存会话草稿
+  Future<void> saveDraft(String conversationId, String draft) async {
+    await (update(conversations)..where((t) => t.id.equals(conversationId)))
+        .write(ConversationsCompanion(
+      draft: Value(draft),
+      updatedAt: Value(DateTime.now()),
+    ));
+  }
+
+  /// 获取会话草稿
+  Future<String?> getDraft(String conversationId) async {
+    final conversation = await (select(conversations)
+          ..where((t) => t.id.equals(conversationId)))
+        .getSingleOrNull();
+    return conversation?.draft;
+  }
+
+  /// 清除会话草稿
+  Future<void> clearDraft(String conversationId) async {
+    await (update(conversations)..where((t) => t.id.equals(conversationId)))
+        .write(const ConversationsCompanion(
+      draft: Value(null),
+    ));
   }
 
   // ===== 联系人操作 =====

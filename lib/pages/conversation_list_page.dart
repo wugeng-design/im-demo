@@ -7,6 +7,7 @@ import '../theme/im_design_tokens.dart';
 import 'chat_detail_page.dart';
 import 'create_group_page.dart';
 import 'login_page.dart';
+import 'message_search_page.dart';
 
 /// 会话列表页面 - IM 主页
 class ConversationListPage extends ConsumerWidget {
@@ -25,6 +26,19 @@ class ConversationListPage extends ConsumerWidget {
         backgroundColor: colors.surface,
         elevation: 0.5,
         actions: [
+          // 搜索按钮
+          IconButton(
+            icon: const Icon(Icons.search),
+            tooltip: '搜索',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const MessageSearchPage(),
+                ),
+              );
+            },
+          ),
           // 创建群聊按钮 - 使用自定义深色弹出菜单
           Builder(
             builder: (buttonContext) => IconButton(
@@ -185,7 +199,7 @@ class ConversationListPage extends ConsumerWidget {
 
   void _showNewChatDialog(BuildContext context, WidgetRef ref) {
     final controller = TextEditingController();
-    final contacts = ref.read(contactsProvider);
+    final contacts = ref.read(contactsProvider).valueOrNull ?? [];
 
     showModalBottomSheet(
       context: context,
@@ -435,6 +449,38 @@ class _ConversationTile extends StatelessWidget {
     required this.onLongPress,
   });
 
+  Widget? _buildSubtitle() {
+    // 优先显示草稿
+    if (conversation.hasDraft) {
+      return RichText(
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        text: TextSpan(
+          children: [
+            TextSpan(
+              text: '[草稿] ',
+              style: TextStyle(color: Colors.red[400], fontSize: 13),
+            ),
+            TextSpan(
+              text: conversation.draft,
+              style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+    // 显示最后一条消息
+    if (conversation.lastMessage != null) {
+      return Text(
+        conversation.lastMessage!,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+      );
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -455,14 +501,7 @@ class _ConversationTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(fontWeight: FontWeight.w500),
       ),
-      subtitle: conversation.lastMessage != null
-          ? Text(
-              conversation.lastMessage!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-            )
-          : null,
+      subtitle: _buildSubtitle(),
       trailing: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,

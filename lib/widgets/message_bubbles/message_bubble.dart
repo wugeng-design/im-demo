@@ -26,6 +26,7 @@ class MessageBubble extends StatelessWidget {
     this.senderAvatar,
     this.showSenderName = false,
     this.showAvatar = false,
+    this.isEdited = false,
     this.onLongPress,
     this.onTap,
     this.onRetry,
@@ -58,6 +59,9 @@ class MessageBubble extends StatelessWidget {
 
   /// 是否显示头像
   final bool showAvatar;
+
+  /// 是否已编辑
+  final bool isEdited;
 
   /// 长按回调
   final VoidCallback? onLongPress;
@@ -170,11 +174,23 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  /// 构建底部（时间 + 状态）
+  /// 构建底部（时间 + 状态 + 已编辑标记）
   Widget _buildFooter(ImColorScheme colors) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // 已编辑标记
+        if (isEdited) ...[
+          Text(
+            '已编辑',
+            style: TextStyle(
+              color: isSentByMe ? Colors.black45 : colors.textTertiary,
+              fontSize: 10,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(width: 4),
+        ],
         Text(
           _formatTime(timestamp),
           style: TextStyle(

@@ -24,6 +24,7 @@ class Message {
   final String? status; // sending, sent, delivered, read, failed
   final MessageType messageType;
   final MediaMetadata? media;
+  final bool isEdited;
 
   const Message({
     required this.id,
@@ -37,6 +38,7 @@ class Message {
     this.status = 'sent',
     this.messageType = MessageType.text,
     this.media,
+    this.isEdited = false,
   });
 
   /// 是否是媒体消息
@@ -74,6 +76,7 @@ class Message {
     String? status,
     MessageType? messageType,
     MediaMetadata? media,
+    bool? isEdited,
   }) {
     return Message(
       id: id ?? this.id,
@@ -87,6 +90,7 @@ class Message {
       status: status ?? this.status,
       messageType: messageType ?? this.messageType,
       media: media ?? this.media,
+      isEdited: isEdited ?? this.isEdited,
     );
   }
 

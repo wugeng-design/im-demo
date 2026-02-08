@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:open_file/open_file.dart';
 
 import '../providers/im_provider.dart';
 import '../sdk/models/message.dart';
@@ -13,6 +14,8 @@ import '../widgets/message_bubbles/message_bubbles.dart';
 import '../widgets/input/input.dart';
 import 'group_detail_page.dart';
 import 'message_search_page.dart';
+import 'media/image_preview_page.dart';
+import 'media/video_player_page.dart';
 
 /// 聊天详情页面
 class ChatDetailPage extends ConsumerStatefulWidget {
@@ -1215,24 +1218,96 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   }
 
   void _previewImage(Message message) {
-    // TODO: 实现图片预览
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('图片预览功能开发中')),
+    // 获取图片 URL（优先使用 media.remoteUrl，其次使用 body）
+    final imageUrl = message.media?.remoteUrl ??
+        (message.body.startsWith('http') ? message.body : null);
+
+    if (imageUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法获取图片地址')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ImagePreviewPage(
+          imageUrl: imageUrl,
+          heroTag: 'image_${message.id}',
+          fileName: message.media?.fileName,
+          localFilePath: message.media?.localFilePath,
+        ),
+      ),
     );
   }
 
   void _playVideo(Message message) {
-    // TODO: 实现视频播放
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('视频播放功能开发中')),
+    // 获取视频 URL（优先使用 media.remoteUrl，其次使用 body）
+    final videoUrl = message.media?.remoteUrl ??
+        (message.body.startsWith('http') ? message.body : null);
+
+    if (videoUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法获取视频地址')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VideoPlayerPage(
+          videoUrl: videoUrl,
+          localFilePath: message.media?.localFilePath,
+          title: message.media?.fileName,
+        ),
+      ),
     );
   }
 
-  void _openFile(Message message) {
-    // TODO: 实现文件打开
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('文件打开功能开发中')),
-    );
+  Future<void> _openFile(Message message) async {
+    // 优先使用本地文件
+    String? filePath = message.media?.localFilePath;
+
+    if (filePath != null && filePath.isNotEmpty) {
+      // 去除 file:// 前缀
+      if (filePath.startsWith('file://')) {
+        filePath = filePath.substring(7);
+      }
+
+      final file = File(filePath);
+      if (await file.exists()) {
+        try {
+          await OpenFile.open(filePath);
+          return;
+        } catch (e) {
+          // 本地打开失败，尝试远程 URL
+        }
+      }
+    }
+
+    // 使用远程 URL
+    final remoteUrl = message.media?.remoteUrl ??
+        (message.body.startsWith('http') ? message.body : null);
+
+    if (remoteUrl != null) {
+      try {
+        await OpenFile.open(remoteUrl);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('无法打开文件: $e')),
+          );
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法获取文件地址')),
+        );
+      }
+    }
   }
 
   void _showChatSettings(BuildContext context) {

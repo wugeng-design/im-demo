@@ -9,6 +9,7 @@ import '../sdk/models/contact.dart';
 import '../sdk/services/impl/standalone_connection_service.dart';
 import '../sdk/services/im_connection_service.dart';
 import '../sdk/services/reconnect_manager.dart';
+import '../sdk/services/typing_indicator_service.dart';
 
 /// 数据库 Provider
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -58,6 +59,22 @@ final reconnectStateProvider = Provider<ReconnectState>((ref) {
 final isReconnectingProvider = Provider<bool>((ref) {
   final state = ref.watch(reconnectStateProvider);
   return state == ReconnectState.waiting || state == ReconnectState.reconnecting;
+});
+
+/// 输入状态指示器服务 Provider
+final typingIndicatorServiceProvider = Provider<TypingIndicatorService>((ref) {
+  final service = TypingIndicatorService();
+  // 设置当前用户 JID
+  final connectionService = ref.watch(imConnectionServiceProvider);
+  service.currentUserJid = connectionService.currentJid;
+  ref.onDispose(() => service.dispose());
+  return service;
+});
+
+/// 指定会话的输入状态 Provider
+final typingStateProvider = StreamProvider.family<TypingStateEvent?, String>((ref, conversationId) {
+  final service = ref.watch(typingIndicatorServiceProvider);
+  return service.typingStateStream.where((e) => e.conversationId == conversationId);
 });
 
 /// 会话列表 Provider（监听数据库变化）
@@ -603,17 +620,25 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
   }
 }
 
-/// 联系人列表 Provider (模拟数据)
-final contactsProvider = Provider<List<Contact>>((ref) {
-  final currentJid = ref.watch(currentJidProvider);
-  final domain = currentJid?.split('@').last ?? 'localhost';
+/// 联系人列表 Provider (从服务器获取)
+final contactsProvider = FutureProvider<List<Contact>>((ref) async {
+  final service = ref.watch(imConnectionServiceProvider);
+  final isConnected = ref.watch(isConnectedProvider);
 
-  // 返回一些模拟联系人
-  return [
-    Contact(jid: 'admin@$domain', name: 'Admin'),
-    Contact(jid: 'user1@$domain', name: 'User 1'),
-    Contact(jid: 'user2@$domain', name: 'User 2'),
-    Contact(jid: 'user3@$domain', name: 'User 3'),
-    Contact(jid: 'test@$domain', name: 'Test User'),
-  ].where((c) => c.jid != currentJid).toList();
+  if (!isConnected) {
+    return [];
+  }
+
+  try {
+    final userJids = await service.getRegisteredUsers();
+    return userJids.map((jid) {
+      final username = jid.split('@').first;
+      // 将用户名首字母大写作为显示名
+      final displayName = username[0].toUpperCase() + username.substring(1);
+      return Contact(jid: jid, name: displayName);
+    }).toList();
+  } catch (e) {
+    print('[Contacts] 获取联系人失败: $e');
+    return [];
+  }
 });

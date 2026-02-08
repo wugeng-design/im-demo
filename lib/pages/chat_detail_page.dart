@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../theme/im_design_tokens.dart';
 import '../widgets/message_bubbles/message_bubbles.dart';
 import '../widgets/input/input.dart';
 import 'group_detail_page.dart';
+import 'message_search_page.dart';
 
 /// 聊天详情页面
 class ChatDetailPage extends ConsumerStatefulWidget {
@@ -42,17 +44,171 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   /// 正在回复的消息
   Message? _replyingMessage;
 
+  /// 是否处于多选模式
+  bool _isSelectionMode = false;
+
+  /// 选中的消息 ID 集合
+  final Set<String> _selectedMessageIds = {};
+
+  /// 初始草稿文本
+  String? _initialDraft;
+
+  /// 草稿保存防抖计时器
+  Timer? _draftSaveTimer;
+
+  /// 当前输入的文本（用于保存草稿）
+  String _currentInputText = '';
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadDraft();
   }
 
   @override
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _draftSaveTimer?.cancel();
+    // 离开页面时保存草稿
+    _saveDraftImmediately();
     super.dispose();
+  }
+
+  /// 加载草稿
+  Future<void> _loadDraft() async {
+    final repository = ref.read(repositoryProvider);
+    final draft = await repository.getDraft(widget.conversationId);
+    if (draft != null && draft.isNotEmpty && mounted) {
+      setState(() {
+        _initialDraft = draft;
+        _currentInputText = draft;
+      });
+    }
+  }
+
+  /// 文本变化时保存草稿（防抖）并发送输入状态
+  void _onInputTextChanged(String text) {
+    _currentInputText = text;
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(seconds: 1), () {
+      _saveDraftImmediately();
+    });
+
+    // 通知输入状态服务
+    final typingService = ref.read(typingIndicatorServiceProvider);
+    if (text.isNotEmpty) {
+      typingService.onLocalTyping(widget.conversationId);
+    } else {
+      typingService.onLocalTypingStopped(widget.conversationId);
+    }
+  }
+
+  /// 立即保存草稿
+  void _saveDraftImmediately() {
+    final repository = ref.read(repositoryProvider);
+    if (_currentInputText.isNotEmpty) {
+      repository.saveDraft(widget.conversationId, _currentInputText);
+    } else {
+      repository.clearDraft(widget.conversationId);
+    }
+  }
+
+  /// 清除草稿
+  Future<void> _clearDraft() async {
+    _currentInputText = '';
+    _draftSaveTimer?.cancel();
+    final repository = ref.read(repositoryProvider);
+    await repository.clearDraft(widget.conversationId);
+  }
+
+  // ========== 多选模式 ==========
+
+  /// 进入多选模式
+  void _enterSelectionMode(String messageId) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedMessageIds.clear();
+      _selectedMessageIds.add(messageId);
+    });
+  }
+
+  /// 退出多选模式
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedMessageIds.clear();
+    });
+  }
+
+  /// 切换消息选中状态
+  void _toggleMessageSelection(String messageId) {
+    setState(() {
+      if (_selectedMessageIds.contains(messageId)) {
+        _selectedMessageIds.remove(messageId);
+        // 如果没有选中任何消息，退出多选模式
+        if (_selectedMessageIds.isEmpty) {
+          _isSelectionMode = false;
+        }
+      } else {
+        _selectedMessageIds.add(messageId);
+      }
+    });
+  }
+
+  /// 全选
+  void _selectAll(List<Message> messages) {
+    setState(() {
+      _selectedMessageIds.clear();
+      for (final msg in messages) {
+        _selectedMessageIds.add(msg.id);
+      }
+    });
+  }
+
+  /// 批量删除选中的消息
+  Future<void> _deleteSelectedMessages() async {
+    if (_selectedMessageIds.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除消息'),
+        content: Text('确定要删除选中的 ${_selectedMessageIds.length} 条消息吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final notifier = ref.read(messagesProvider(widget.conversationId).notifier);
+      for (final id in _selectedMessageIds.toList()) {
+        await notifier.deleteMessage(id);
+      }
+      _exitSelectionMode();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('已删除选中的消息')),
+        );
+      }
+    }
+  }
+
+  /// 转发选中的消息（显示提示）
+  void _forwardSelectedMessages() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('转发功能开发中')),
+    );
   }
 
   /// 滚动监听：到达顶部时加载更多历史
@@ -94,6 +250,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     await ref
         .read(messagesProvider(widget.conversationId).notifier)
         .sendMessage(text);
+    // 发送成功后清除草稿
+    await _clearDraft();
     _scrollToBottom();
   }
 
@@ -115,14 +273,117 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     _sendMediaMessage(file, MediaType.file);
   }
 
-  void _sendMediaMessage(File file, MediaType type) {
-    // TODO: 实现媒体消息发送
-    // 1. 创建本地消息（乐观更新）
-    // 2. 上传媒体文件
-    // 3. 发送 XMPP 消息
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('即将发送: ${file.path.split('/').last}')),
+  Future<void> _sendMediaMessage(File file, MediaType type) async {
+    final service = ref.read(imConnectionServiceProvider);
+    final repository = ref.read(repositoryProvider);
+    final currentJid = service.currentJid;
+
+    if (currentJid == null) return;
+
+    // 获取文件信息
+    final fileName = file.path.split('/').last;
+    final fileSize = await file.length();
+    final mimeType = _getMimeType(fileName);
+
+    // 创建媒体元数据
+    final media = MediaMetadata(
+      type: type,
+      localFilePath: file.path,
+      fileName: fileName,
+      mimeType: mimeType,
+      fileSize: fileSize,
     );
+
+    // 确定消息类型
+    final messageType = switch (type) {
+      MediaType.image => MessageType.image,
+      MediaType.video => MessageType.video,
+      MediaType.file => MessageType.file,
+    };
+
+    // 创建本地消息
+    final message = Message(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      conversationId: widget.conversationId,
+      senderId: currentJid,
+      senderName: currentJid.split('@').first,
+      body: _getMediaDisplayText(type, fileName),
+      timestamp: DateTime.now(),
+      isMe: true,
+      status: 'sending',
+      messageType: messageType,
+      media: media,
+    );
+
+    // 保存到数据库
+    await repository.saveMessage(message);
+    _scrollToBottom();
+
+    // 发送到服务器
+    // 注意: XMPP 原生不支持文件传输，需要使用 XEP-0363 HTTP File Upload
+    // 目前发送文本占位符
+    try {
+      final isGroup = widget.conversationId.contains('@conference.');
+      final displayText = _getMediaDisplayText(type, fileName);
+      await service.sendMessage(widget.conversationId, displayText, isGroupChat: isGroup);
+
+      // 更新状态为已发送
+      await repository.updateMessageStatus(message.id, 'sent');
+
+      // 更新会话列表
+      final existingConversation = ref.read(conversationsProvider).firstWhere(
+        (c) => c.id == widget.conversationId,
+        orElse: () => throw StateError('Conversation not found'),
+      );
+      await ref.read(conversationsProvider.notifier).upsertConversation(
+        existingConversation.copyWith(
+          lastMessage: displayText,
+          lastMessageTime: DateTime.now(),
+        ),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已发送: $fileName')),
+        );
+      }
+    } catch (e) {
+      await repository.updateMessageStatus(message.id, 'failed');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('发送失败: $e')),
+        );
+      }
+    }
+  }
+
+  String _getMimeType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    return switch (ext) {
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'png' => 'image/png',
+      'gif' => 'image/gif',
+      'webp' => 'image/webp',
+      'mp4' => 'video/mp4',
+      'mov' => 'video/quicktime',
+      'avi' => 'video/x-msvideo',
+      'pdf' => 'application/pdf',
+      'doc' => 'application/msword',
+      'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'xls' => 'application/vnd.ms-excel',
+      'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'zip' => 'application/zip',
+      'rar' => 'application/x-rar-compressed',
+      _ => 'application/octet-stream',
+    };
+  }
+
+  String _getMediaDisplayText(MediaType type, String fileName) {
+    return switch (type) {
+      MediaType.image => '[图片]',
+      MediaType.video => '[视频]',
+      MediaType.file => '[文件] $fileName',
+    };
   }
 
   // ========== 消息操作 ==========
@@ -328,27 +589,9 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     final colors = ImDesignTokens.colorSchemeOf(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(widget.conversationName),
-            if (widget.isGroup)
-              Text(
-                '群聊',
-                style: TextStyle(fontSize: 12, color: colors.textSecondary),
-              ),
-          ],
-        ),
-        backgroundColor: colors.surface,
-        elevation: 0.5,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () => _showChatSettings(context),
-          ),
-        ],
-      ),
+      appBar: _isSelectionMode
+          ? _buildSelectionAppBar(colors, messages)
+          : _buildNormalAppBar(colors),
       backgroundColor: colors.background,
       body: Column(
         children: [
@@ -358,16 +601,21 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
                 ? _buildEmptyState(colors)
                 : _buildMessageList(messages, colors),
           ),
+          // 多选模式工具栏
+          if (_isSelectionMode)
+            _buildSelectionToolbar(colors)
           // 编辑/回复指示栏
-          if (_editingMessage != null || _replyingMessage != null)
-            _buildEditReplyBar(colors),
+          else if (_editingMessage != null || _replyingMessage != null)
+            _buildEditReplyBar(colors)
           // 输入区域
-          if (isConnected)
+          else if (isConnected)
             MessageInputArea(
               key: _inputKey,
               onSend: _editingMessage != null
                   ? _submitEdit
                   : _sendTextMessage,
+              initialText: _initialDraft,
+              onTextChanged: _onInputTextChanged,
               onImageSelected: _onImageSelected,
               onMultipleImagesSelected: _onMultipleImagesSelected,
               onVideoSelected: _onVideoSelected,
@@ -375,6 +623,131 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
             )
           else
             _buildDisconnectedBar(colors),
+        ],
+      ),
+    );
+  }
+
+  /// 构建普通 AppBar
+  PreferredSizeWidget _buildNormalAppBar(ImColorScheme colors) {
+    // 监听输入状态
+    final typingService = ref.watch(typingIndicatorServiceProvider);
+    final isTyping = typingService.isTyping(widget.conversationId);
+
+    return AppBar(
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.conversationName),
+          if (isTyping)
+            Text(
+              '对方正在输入...',
+              style: TextStyle(
+                fontSize: 12,
+                color: colors.primary,
+                fontStyle: FontStyle.italic,
+              ),
+            )
+          else if (widget.isGroup)
+            Text(
+              '群聊',
+              style: TextStyle(fontSize: 12, color: colors.textSecondary),
+            ),
+        ],
+      ),
+      backgroundColor: colors.surface,
+      elevation: 0.5,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.more_vert),
+          onPressed: () => _showChatSettings(context),
+        ),
+      ],
+    );
+  }
+
+  /// 构建多选模式 AppBar
+  PreferredSizeWidget _buildSelectionAppBar(ImColorScheme colors, List<Message> messages) {
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.close),
+        onPressed: _exitSelectionMode,
+      ),
+      title: Text('已选择 ${_selectedMessageIds.length} 条'),
+      backgroundColor: colors.surface,
+      elevation: 0.5,
+      actions: [
+        TextButton(
+          onPressed: _selectedMessageIds.length == messages.length
+              ? null
+              : () => _selectAll(messages),
+          child: Text(
+            '全选',
+            style: TextStyle(
+              color: _selectedMessageIds.length == messages.length
+                  ? colors.textDisabled
+                  : colors.primary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 构建多选模式底部工具栏
+  Widget _buildSelectionToolbar(ImColorScheme colors) {
+    final hasSelection = _selectedMessageIds.isNotEmpty;
+
+    return Container(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        top: 12,
+        bottom: MediaQuery.of(context).padding.bottom + 12,
+      ),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(
+          top: BorderSide(color: colors.divider, width: 0.5),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _buildToolbarButton(
+            icon: Icons.delete_outline,
+            label: '删除',
+            color: hasSelection ? Colors.red : colors.textDisabled,
+            onTap: hasSelection ? _deleteSelectedMessages : null,
+          ),
+          _buildToolbarButton(
+            icon: Icons.forward,
+            label: '转发',
+            color: hasSelection ? colors.textPrimary : colors.textDisabled,
+            onTap: hasSelection ? _forwardSelectedMessages : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolbarButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(color: color, fontSize: 12),
+          ),
         ],
       ),
     );
@@ -533,7 +906,18 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
 
     // 长按菜单回调（使用 Builder 获取正确的位置）
     void onLongPress(TapDownDetails details) {
-      _showMessageMenu(message, details.globalPosition);
+      if (_isSelectionMode) {
+        // 多选模式下长按也切换选中
+        _toggleMessageSelection(message.id);
+      } else {
+        // 非多选模式下显示菜单
+        _showMessageMenu(message, details.globalPosition);
+      }
+    }
+
+    // 点击回调（多选模式下切换选中）
+    void onTapInSelectionMode() {
+      _toggleMessageSelection(message.id);
     }
 
     // 重试回调
@@ -541,83 +925,151 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       _retryMessage(message);
     }
 
+    // 构建消息气泡内容
+    Widget bubble;
+
     // 根据消息类型选择气泡
     switch (message.messageType) {
       case MessageType.image:
-        return GestureDetector(
-          onLongPressStart: (details) => onLongPress(TapDownDetails(globalPosition: details.globalPosition)),
-          child: ImageMessageBubble(
-            isSentByMe: message.isMe,
-            localFilePath: message.media?.localFilePath,
-            imageUrl: message.media?.remoteUrl,
-            width: message.media?.width?.toDouble(),
-            height: message.media?.height?.toDouble(),
-            status: status,
-            senderId: message.senderId,
-            senderName: message.senderName,
-            senderAvatar: message.senderAvatar,
-            showAvatar: showAvatar,
-            onTap: () => _previewImage(message),
-            onRetry: onRetry,
-          ),
+        bubble = ImageMessageBubble(
+          isSentByMe: message.isMe,
+          localFilePath: message.media?.localFilePath,
+          imageUrl: message.media?.remoteUrl,
+          width: message.media?.width?.toDouble(),
+          height: message.media?.height?.toDouble(),
+          status: status,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          senderAvatar: message.senderAvatar,
+          showAvatar: showAvatar,
+          onTap: _isSelectionMode ? null : () => _previewImage(message),
+          onRetry: onRetry,
         );
 
       case MessageType.video:
-        return GestureDetector(
-          onLongPressStart: (details) => onLongPress(TapDownDetails(globalPosition: details.globalPosition)),
-          child: VideoMessageBubble(
-            isSentByMe: message.isMe,
-            thumbnailPath: message.media?.thumbnailUrl,
-            thumbnailUrl: message.media?.thumbnailUrl,
-            duration: message.media?.duration,
-            width: message.media?.width?.toDouble(),
-            height: message.media?.height?.toDouble(),
-            status: status,
-            senderId: message.senderId,
-            senderName: message.senderName,
-            senderAvatar: message.senderAvatar,
-            showAvatar: showAvatar,
-            onTap: () => _playVideo(message),
-            onRetry: onRetry,
-          ),
+        bubble = VideoMessageBubble(
+          isSentByMe: message.isMe,
+          thumbnailPath: message.media?.thumbnailUrl,
+          thumbnailUrl: message.media?.thumbnailUrl,
+          duration: message.media?.duration,
+          width: message.media?.width?.toDouble(),
+          height: message.media?.height?.toDouble(),
+          status: status,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          senderAvatar: message.senderAvatar,
+          showAvatar: showAvatar,
+          onTap: _isSelectionMode ? null : () => _playVideo(message),
+          onRetry: onRetry,
         );
 
       case MessageType.file:
-        return GestureDetector(
-          onLongPressStart: (details) => onLongPress(TapDownDetails(globalPosition: details.globalPosition)),
-          child: FileMessageBubble(
-            fileName: message.media?.fileName ?? '未知文件',
+        bubble = FileMessageBubble(
+          fileName: message.media?.fileName ?? '未知文件',
+          isSentByMe: message.isMe,
+          fileSize: message.media?.fileSize,
+          mimeType: message.media?.mimeType,
+          status: status,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          senderAvatar: message.senderAvatar,
+          showAvatar: showAvatar,
+          onTap: _isSelectionMode ? null : () => _openFile(message),
+          onRetry: onRetry,
+        );
+
+      case MessageType.system:
+        // 系统消息不参与多选
+        if (message.body.contains('撤回了一条消息')) {
+          return RecalledMessageBubble(
             isSentByMe: message.isMe,
-            fileSize: message.media?.fileSize,
-            mimeType: message.media?.mimeType,
-            status: status,
-            senderId: message.senderId,
-            senderName: message.senderName,
-            senderAvatar: message.senderAvatar,
-            showAvatar: showAvatar,
-            onTap: () => _openFile(message),
-            onRetry: onRetry,
+            senderName: message.isMe ? null : message.senderName,
+          );
+        }
+        return Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: colors.surfaceVariant.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              message.body,
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
           ),
         );
 
       case MessageType.text:
-      case MessageType.system:
-        return GestureDetector(
-          onLongPressStart: (details) => onLongPress(TapDownDetails(globalPosition: details.globalPosition)),
-          child: MessageBubble(
-            body: message.body,
-            timestamp: message.timestamp,
-            isSentByMe: message.isMe,
-            status: status,
-            senderId: message.senderId,
-            senderName: message.senderName,
-            senderAvatar: message.senderAvatar,
-            showSenderName: widget.isGroup && !message.isMe,
-            showAvatar: showAvatar,
-            onRetry: onRetry,
-          ),
+        bubble = MessageBubble(
+          body: message.body,
+          timestamp: message.timestamp,
+          isSentByMe: message.isMe,
+          status: status,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          senderAvatar: message.senderAvatar,
+          showSenderName: widget.isGroup && !message.isMe,
+          showAvatar: showAvatar,
+          isEdited: message.isEdited,
+          onRetry: onRetry,
         );
     }
+
+    // 包装手势检测和多选 UI
+    final isSelected = _selectedMessageIds.contains(message.id);
+
+    Widget result = GestureDetector(
+      onTap: _isSelectionMode ? onTapInSelectionMode : null,
+      onLongPressStart: (details) {
+        if (!_isSelectionMode) {
+          // 长按进入多选模式
+          _enterSelectionMode(message.id);
+        }
+      },
+      onSecondaryTapDown: (details) => onLongPress(details),
+      child: bubble,
+    );
+
+    // 多选模式下添加复选框
+    if (_isSelectionMode) {
+      result = Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // 复选框
+          GestureDetector(
+            onTap: onTapInSelectionMode,
+            child: Container(
+              width: 40,
+              alignment: Alignment.center,
+              child: Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? colors.primary : Colors.transparent,
+                  border: Border.all(
+                    color: isSelected ? colors.primary : colors.textTertiary,
+                    width: 2,
+                  ),
+                ),
+                child: isSelected
+                    ? const Icon(Icons.check, size: 14, color: Colors.white)
+                    : null,
+              ),
+            ),
+          ),
+          // 消息气泡
+          Expanded(child: result),
+        ],
+      );
+    }
+
+    return result;
   }
 
   /// 构建编辑/回复指示栏
@@ -762,8 +1214,14 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               title: const Text('搜索聊天记录'),
               onTap: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('搜索功能开发中')),
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MessageSearchPage(
+                      conversationId: widget.conversationId,
+                      conversationName: widget.conversationName,
+                    ),
+                  ),
                 );
               },
             ),

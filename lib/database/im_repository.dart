@@ -132,6 +132,46 @@ class ImRepository {
     await _db.updateMessageStatus(messageId, status);
   }
 
+  /// 搜索消息
+  ///
+  /// [keyword] 搜索关键词
+  /// [conversationId] 可选，限定在某个会话内搜索
+  /// [limit] 最大返回数量
+  Future<List<models.Message>> searchMessages(
+    String keyword, {
+    String? conversationId,
+    int limit = 100,
+  }) async {
+    final list = await _db.searchMessages(
+      keyword,
+      conversationId: conversationId,
+      limit: limit,
+    );
+    return list.map(_toModelMessage).toList();
+  }
+
+  /// 更新消息内容（用于编辑消息）
+  Future<void> updateMessageBody(String messageId, String newBody) async {
+    await _db.updateMessageBody(messageId, newBody);
+  }
+
+  // ===== 草稿操作 =====
+
+  /// 保存草稿
+  Future<void> saveDraft(String conversationId, String draft) async {
+    await _db.saveDraft(conversationId, draft);
+  }
+
+  /// 获取草稿
+  Future<String?> getDraft(String conversationId) async {
+    return await _db.getDraft(conversationId);
+  }
+
+  /// 清除草稿
+  Future<void> clearDraft(String conversationId) async {
+    await _db.clearDraft(conversationId);
+  }
+
   // ===== 联系人操作 =====
 
   /// 监听联系人列表
@@ -167,6 +207,7 @@ class ImRepository {
       isGroup: db.isGroup,
       isPinned: db.isPinned,
       avatar: db.avatar,
+      draft: db.draft,
     );
   }
 
@@ -184,6 +225,7 @@ class ImRepository {
         (t) => t.name == db.type,
         orElse: () => models.MessageType.text,
       ),
+      isEdited: db.extra == 'edited',
     );
   }
 

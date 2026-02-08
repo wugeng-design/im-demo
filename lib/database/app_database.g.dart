@@ -101,6 +101,15 @@ class $ConversationsTable extends Conversations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _draftMeta = const VerificationMeta('draft');
+  @override
+  late final GeneratedColumn<String> draft = GeneratedColumn<String>(
+    'draft',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -135,6 +144,7 @@ class $ConversationsTable extends Conversations
     isGroup,
     isPinned,
     avatar,
+    draft,
     createdAt,
     updatedAt,
   ];
@@ -208,6 +218,12 @@ class $ConversationsTable extends Conversations
         avatar.isAcceptableOrUnknown(data['avatar']!, _avatarMeta),
       );
     }
+    if (data.containsKey('draft')) {
+      context.handle(
+        _draftMeta,
+        draft.isAcceptableOrUnknown(data['draft']!, _draftMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -261,6 +277,10 @@ class $ConversationsTable extends Conversations
         DriftSqlType.string,
         data['${effectivePrefix}avatar'],
       ),
+      draft: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}draft'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -287,6 +307,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final bool isGroup;
   final bool isPinned;
   final String? avatar;
+  final String? draft;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Conversation({
@@ -298,6 +319,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     required this.isGroup,
     required this.isPinned,
     this.avatar,
+    this.draft,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -317,6 +339,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     map['is_pinned'] = Variable<bool>(isPinned);
     if (!nullToAbsent || avatar != null) {
       map['avatar'] = Variable<String>(avatar);
+    }
+    if (!nullToAbsent || draft != null) {
+      map['draft'] = Variable<String>(draft);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -339,6 +364,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       avatar: avatar == null && nullToAbsent
           ? const Value.absent()
           : Value(avatar),
+      draft: draft == null && nullToAbsent
+          ? const Value.absent()
+          : Value(draft),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -358,6 +386,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       isGroup: serializer.fromJson<bool>(json['isGroup']),
       isPinned: serializer.fromJson<bool>(json['isPinned']),
       avatar: serializer.fromJson<String?>(json['avatar']),
+      draft: serializer.fromJson<String?>(json['draft']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -374,6 +403,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       'isGroup': serializer.toJson<bool>(isGroup),
       'isPinned': serializer.toJson<bool>(isPinned),
       'avatar': serializer.toJson<String?>(avatar),
+      'draft': serializer.toJson<String?>(draft),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -388,6 +418,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     bool? isGroup,
     bool? isPinned,
     Value<String?> avatar = const Value.absent(),
+    Value<String?> draft = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Conversation(
@@ -401,6 +432,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     isGroup: isGroup ?? this.isGroup,
     isPinned: isPinned ?? this.isPinned,
     avatar: avatar.present ? avatar.value : this.avatar,
+    draft: draft.present ? draft.value : this.draft,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -420,6 +452,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       isGroup: data.isGroup.present ? data.isGroup.value : this.isGroup,
       isPinned: data.isPinned.present ? data.isPinned.value : this.isPinned,
       avatar: data.avatar.present ? data.avatar.value : this.avatar,
+      draft: data.draft.present ? data.draft.value : this.draft,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -436,6 +469,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('isGroup: $isGroup, ')
           ..write('isPinned: $isPinned, ')
           ..write('avatar: $avatar, ')
+          ..write('draft: $draft, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -452,6 +486,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     isGroup,
     isPinned,
     avatar,
+    draft,
     createdAt,
     updatedAt,
   );
@@ -467,6 +502,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           other.isGroup == this.isGroup &&
           other.isPinned == this.isPinned &&
           other.avatar == this.avatar &&
+          other.draft == this.draft &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -480,6 +516,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<bool> isGroup;
   final Value<bool> isPinned;
   final Value<String?> avatar;
+  final Value<String?> draft;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -492,6 +529,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.isGroup = const Value.absent(),
     this.isPinned = const Value.absent(),
     this.avatar = const Value.absent(),
+    this.draft = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -505,6 +543,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.isGroup = const Value.absent(),
     this.isPinned = const Value.absent(),
     this.avatar = const Value.absent(),
+    this.draft = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -519,6 +558,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<bool>? isGroup,
     Expression<bool>? isPinned,
     Expression<String>? avatar,
+    Expression<String>? draft,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -532,6 +572,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       if (isGroup != null) 'is_group': isGroup,
       if (isPinned != null) 'is_pinned': isPinned,
       if (avatar != null) 'avatar': avatar,
+      if (draft != null) 'draft': draft,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -547,6 +588,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<bool>? isGroup,
     Value<bool>? isPinned,
     Value<String?>? avatar,
+    Value<String?>? draft,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -560,6 +602,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       isGroup: isGroup ?? this.isGroup,
       isPinned: isPinned ?? this.isPinned,
       avatar: avatar ?? this.avatar,
+      draft: draft ?? this.draft,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -593,6 +636,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     if (avatar.present) {
       map['avatar'] = Variable<String>(avatar.value);
     }
+    if (draft.present) {
+      map['draft'] = Variable<String>(draft.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -616,6 +662,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('isGroup: $isGroup, ')
           ..write('isPinned: $isPinned, ')
           ..write('avatar: $avatar, ')
+          ..write('draft: $draft, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -1754,6 +1801,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       Value<bool> isGroup,
       Value<bool> isPinned,
       Value<String?> avatar,
+      Value<String?> draft,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -1768,6 +1816,7 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<bool> isGroup,
       Value<bool> isPinned,
       Value<String?> avatar,
+      Value<String?> draft,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -1850,6 +1899,11 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<String> get avatar => $composableBuilder(
     column: $table.avatar,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get draft => $composableBuilder(
+    column: $table.draft,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1938,6 +1992,11 @@ class $$ConversationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get draft => $composableBuilder(
+    column: $table.draft,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -1987,6 +2046,9 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<String> get avatar =>
       $composableBuilder(column: $table.avatar, builder: (column) => column);
+
+  GeneratedColumn<String> get draft =>
+      $composableBuilder(column: $table.draft, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -2056,6 +2118,7 @@ class $$ConversationsTableTableManager
                 Value<bool> isGroup = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
                 Value<String?> avatar = const Value.absent(),
+                Value<String?> draft = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2068,6 +2131,7 @@ class $$ConversationsTableTableManager
                 isGroup: isGroup,
                 isPinned: isPinned,
                 avatar: avatar,
+                draft: draft,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -2082,6 +2146,7 @@ class $$ConversationsTableTableManager
                 Value<bool> isGroup = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
                 Value<String?> avatar = const Value.absent(),
+                Value<String?> draft = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2094,6 +2159,7 @@ class $$ConversationsTableTableManager
                 isGroup: isGroup,
                 isPinned: isPinned,
                 avatar: avatar,
+                draft: draft,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

@@ -8,6 +8,7 @@ class Conversation {
   final int unreadCount;
   final bool isPinned;
   final bool isGroup;
+  final String? draft;
 
   const Conversation({
     required this.id,
@@ -18,7 +19,11 @@ class Conversation {
     this.unreadCount = 0,
     this.isPinned = false,
     this.isGroup = false,
+    this.draft,
   });
+
+  /// 是否有草稿
+  bool get hasDraft => draft != null && draft!.isNotEmpty;
 
   Conversation copyWith({
     String? id,
@@ -29,6 +34,7 @@ class Conversation {
     int? unreadCount,
     bool? isPinned,
     bool? isGroup,
+    String? draft,
   }) {
     return Conversation(
       id: id ?? this.id,
@@ -39,6 +45,7 @@ class Conversation {
       unreadCount: unreadCount ?? this.unreadCount,
       isPinned: isPinned ?? this.isPinned,
       isGroup: isGroup ?? this.isGroup,
+      draft: draft ?? this.draft,
     );
   }
 }

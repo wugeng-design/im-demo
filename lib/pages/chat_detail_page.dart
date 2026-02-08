@@ -276,6 +276,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   Future<void> _sendMediaMessage(File file, MediaType type) async {
     final service = ref.read(imConnectionServiceProvider);
     final repository = ref.read(repositoryProvider);
+    final uploadService = ref.read(mediaUploadServiceProvider);
     final currentJid = service.currentJid;
 
     if (currentJid == null) return;
@@ -301,16 +302,18 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       MediaType.file => MessageType.file,
     };
 
+    final messageId = DateTime.now().millisecondsSinceEpoch.toString();
+
     // 创建本地消息
     final message = Message(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: messageId,
       conversationId: widget.conversationId,
       senderId: currentJid,
       senderName: currentJid.split('@').first,
       body: _getMediaDisplayText(type, fileName),
       timestamp: DateTime.now(),
       isMe: true,
-      status: 'sending',
+      status: 'uploading',
       messageType: messageType,
       media: media,
     );
@@ -319,18 +322,46 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     await repository.saveMessage(message);
     _scrollToBottom();
 
-    // 发送到服务器
-    // 注意: XMPP 原生不支持文件传输，需要使用 XEP-0363 HTTP File Upload
-    // 目前发送文本占位符
     try {
-      final isGroup = widget.conversationId.contains('@conference.');
-      final displayText = _getMediaDisplayText(type, fileName);
-      await service.sendMessage(widget.conversationId, displayText, isGroupChat: isGroup);
+      // 上传文件到服务器
+      final uploadResult = await switch (type) {
+        MediaType.image => uploadService.uploadImage(
+            messageId: messageId,
+            file: file,
+            onProgress: (progress) {
+              // 可以在这里更新上传进度 UI
+            },
+          ),
+        MediaType.video => uploadService.uploadVideo(
+            messageId: messageId,
+            file: file,
+          ),
+        MediaType.file => uploadService.uploadFile(
+            messageId: messageId,
+            file: file,
+            mimeType: mimeType,
+          ),
+      };
 
-      // 更新状态为已发送
-      await repository.updateMessageStatus(message.id, 'sent');
+      if (!uploadResult.success) {
+        throw Exception(uploadResult.error ?? '上传失败');
+      }
+
+      final remoteUrl = uploadResult.remoteUrl!;
+
+      // 发送消息到服务器
+      // 消息格式: [TYPE:filename]url
+      // 例如: [IMG:photo.jpg]http://server/image.jpg
+      final isGroup = widget.conversationId.contains('@conference.');
+      final messageBody = _formatMediaMessage(type, remoteUrl, fileName);
+      await service.sendMessage(widget.conversationId, messageBody, isGroupChat: isGroup);
+
+      // 更新消息体为包含 URL 的内容，方便本地显示
+      await repository.updateMessageBody(messageId, messageBody);
+      await repository.updateMessageStatus(messageId, 'sent');
 
       // 更新会话列表
+      final displayText = _getMediaDisplayText(type, fileName);
       final existingConversation = ref.read(conversationsProvider).firstWhere(
         (c) => c.id == widget.conversationId,
         orElse: () => throw StateError('Conversation not found'),
@@ -348,13 +379,24 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         );
       }
     } catch (e) {
-      await repository.updateMessageStatus(message.id, 'failed');
+      await repository.updateMessageStatus(messageId, 'failed');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('发送失败: $e')),
         );
       }
     }
+  }
+
+  /// 格式化媒体消息内容
+  /// 格式: [TYPE:filename]url
+  String _formatMediaMessage(MediaType type, String url, String fileName) {
+    final typeTag = switch (type) {
+      MediaType.image => 'IMG',
+      MediaType.video => 'VIDEO',
+      MediaType.file => 'FILE',
+    };
+    return '[$typeTag:$fileName]$url';
   }
 
   String _getMimeType(String fileName) {
@@ -413,6 +455,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         _startReplyMessage(message);
       case MessageMenuAction.forward:
         _forwardMessage(message);
+      case MessageMenuAction.multiSelect:
+        _enterSelectionMode(message.id);
     }
   }
 
@@ -931,10 +975,14 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     // 根据消息类型选择气泡
     switch (message.messageType) {
       case MessageType.image:
+        // 对于接收的图片消息，URL 存储在 body 中
+        // 对于发送的图片消息，优先使用 media.remoteUrl
+        final imageUrl = message.media?.remoteUrl ??
+            (message.body.startsWith('http') ? message.body : null);
         bubble = ImageMessageBubble(
           isSentByMe: message.isMe,
           localFilePath: message.media?.localFilePath,
-          imageUrl: message.media?.remoteUrl,
+          imageUrl: imageUrl,
           width: message.media?.width?.toDouble(),
           height: message.media?.height?.toDouble(),
           status: status,
@@ -1026,9 +1074,12 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     Widget result = GestureDetector(
       onTap: _isSelectionMode ? onTapInSelectionMode : null,
       onLongPressStart: (details) {
-        if (!_isSelectionMode) {
-          // 长按进入多选模式
-          _enterSelectionMode(message.id);
+        if (_isSelectionMode) {
+          // 多选模式下长按切换选中
+          _toggleMessageSelection(message.id);
+        } else {
+          // 非多选模式下显示菜单
+          _showMessageMenu(message, details.globalPosition);
         }
       },
       onSecondaryTapDown: (details) => onLongPress(details),

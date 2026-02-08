@@ -44,6 +44,9 @@ class ImSdkConfig {
   /// 资源标识（用于多设备）
   final String resource;
 
+  /// ejabberd REST API 端口（默认 5280）
+  final int? apiPort;
+
   const ImSdkConfig({
     required this.host,
     this.port = 5222,
@@ -56,6 +59,7 @@ class ImSdkConfig {
     this.maxReconnectAttempts = 0,
     this.pingInterval = 60,
     this.resource = 'flutter',
+    this.apiPort,
   }) : mucDomain = mucDomain ?? 'conference.$domain';
 
   /// 本地开发配置（连接本地 ejabberd）
@@ -104,6 +108,7 @@ class ImSdkConfig {
       maxReconnectAttempts: json['maxReconnectAttempts'] as int? ?? 0,
       pingInterval: json['pingInterval'] as int? ?? 60,
       resource: json['resource'] as String? ?? 'flutter',
+      apiPort: json['apiPort'] as int?,
     );
   }
 
@@ -121,6 +126,7 @@ class ImSdkConfig {
       'maxReconnectAttempts': maxReconnectAttempts,
       'pingInterval': pingInterval,
       'resource': resource,
+      'apiPort': apiPort,
     };
   }
 
@@ -137,6 +143,7 @@ class ImSdkConfig {
     int? maxReconnectAttempts,
     int? pingInterval,
     String? resource,
+    int? apiPort,
   }) {
     return ImSdkConfig(
       host: host ?? this.host,
@@ -150,6 +157,7 @@ class ImSdkConfig {
       maxReconnectAttempts: maxReconnectAttempts ?? this.maxReconnectAttempts,
       pingInterval: pingInterval ?? this.pingInterval,
       resource: resource ?? this.resource,
+      apiPort: apiPort ?? this.apiPort,
     );
   }
 

@@ -20,6 +20,15 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
   String _searchQuery = '';
 
   @override
+  void initState() {
+    super.initState();
+    // 刷新联系人列表，确保获取最新的注册用户
+    Future.microtask(() {
+      ref.invalidate(contactsProvider);
+    });
+  }
+
+  @override
   void dispose() {
     _groupNameController.dispose();
     _searchController.dispose();
@@ -126,7 +135,8 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
 
   @override
   Widget build(BuildContext context) {
-    final contacts = ref.watch(contactsProvider);
+    final contactsAsync = ref.watch(contactsProvider);
+    final contacts = contactsAsync.valueOrNull ?? [];
     final filteredContacts = _searchQuery.isEmpty
         ? contacts
         : contacts
@@ -177,7 +187,7 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
           // 已选择的成员
           if (_selectedJids.isNotEmpty)
             Container(
-              height: 80,
+              height: 88,
               color: Colors.grey[50],
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: ListView.builder(

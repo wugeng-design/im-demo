@@ -68,6 +68,15 @@ dependencies:
   # 文件打开
   open_file: ^3.5.10
 
+  # 媒体处理
+  flutter_image_compress: ^2.3.0
+  video_thumbnail: ^0.5.3
+  mime: ^2.0.0
+  crypto: ^3.0.6
+
+  # 音频播放
+  just_audio: ^0.9.40
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -4,6 +4,7 @@ import '../../sdk/models/message.dart';
 import '../../theme/im_design_tokens.dart';
 import '../../theme/message_styles.dart';
 import '../im_avatar.dart';
+import '../message_status_widget.dart';
 import 'quote_bubble.dart';
 
 /// 消息状态
@@ -109,16 +110,13 @@ class MessageBubble extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           // 发送失败图标（自己发送的消息，显示在左侧）
+          // 同步自 Light-1-Client: 微信风格红色圆形背景 + 白色感叹号
           if (isSentByMe && status == MessageDisplayStatus.failed)
-            GestureDetector(
-              onTap: onRetry,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8, top: 8),
-                child: Icon(
-                  Icons.error_outline,
-                  size: 18,
-                  color: colors.error,
-                ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8, top: 8),
+              child: MessageFailedIndicator(
+                onRetry: onRetry ?? () {},
+                size: 20,
               ),
             ),
           // 消息气泡
@@ -224,24 +222,26 @@ class MessageBubble extends StatelessWidget {
   }
 
   /// 构建消息状态图标
+  /// 同步自 Light-1-Client 样式
   Widget _buildStatusIcon(ImColorScheme colors) {
     switch (status!) {
       case MessageDisplayStatus.sending:
-        return const SizedBox(
+        return SizedBox(
           width: 12,
           height: 12,
           child: CircularProgressIndicator(
             strokeWidth: 1.5,
-            color: Colors.black45,
+            valueColor: AlwaysStoppedAnimation(colors.textTertiary),
           ),
         );
       case MessageDisplayStatus.sent:
-        // 发送成功不显示对勾
-        return const SizedBox.shrink();
+        // 单勾表示已发送
+        return Icon(Icons.check, size: 14, color: colors.textTertiary);
       case MessageDisplayStatus.delivered:
-        return const Icon(Icons.done_all, size: 14, color: Colors.black45);
+        return Icon(Icons.done_all, size: 14, color: colors.textTertiary);
       case MessageDisplayStatus.read:
-        return Icon(Icons.done_all, size: 14, color: colors.primary);
+        // 蓝色双勾表示已读
+        return Icon(Icons.done_all, size: 14, color: colors.info);
       case MessageDisplayStatus.failed:
         // 错误图标在气泡左侧显示
         return const SizedBox.shrink();

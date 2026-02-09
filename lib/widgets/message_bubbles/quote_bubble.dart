@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../sdk/models/message.dart';
 import '../../theme/im_design_tokens.dart';
 
 /// 引用消息气泡（显示被回复的消息）
+///
+/// 功能：
+/// - 显示被回复消息的预览
+/// - 支持图片/视频缩略图
+/// - 支持已撤回状态
+/// - 左侧有彩色边框指示
 class QuoteBubble extends StatelessWidget {
   const QuoteBubble({
     super.key,
@@ -50,33 +57,116 @@ class QuoteBubble extends StatelessWidget {
             ),
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 发送者名称
-            Text(
-              replyInfo.senderName,
-              style: TextStyle(
-                color: senderColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+            // 主内容
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 发送者名称
+                  Text(
+                    replyInfo.senderName,
+                    style: TextStyle(
+                      color: senderColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  // 消息内容
+                  Text(
+                    replyInfo.displayBody,
+                    style: TextStyle(
+                      color: bodyColor,
+                      fontSize: 13,
+                      fontStyle: replyInfo.isRetracted
+                          ? FontStyle.italic
+                          : FontStyle.normal,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 2),
-            // 消息内容
-            Text(
-              replyInfo.displayBody,
-              style: TextStyle(
-                color: bodyColor,
-                fontSize: 13,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
+            // 缩略图（图片/视频）
+            if (_hasThumbnail) ...[
+              const SizedBox(width: 8),
+              _buildThumbnail(colors),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  /// 是否有缩略图
+  bool get _hasThumbnail {
+    if (replyInfo.isRetracted) return false;
+    final hasUrl = replyInfo.thumbnailUrl != null ||
+        (replyInfo.messageType == MessageType.image && replyInfo.mediaUrl != null);
+    return (replyInfo.messageType == MessageType.image ||
+            replyInfo.messageType == MessageType.video) &&
+        hasUrl;
+  }
+
+  /// 构建缩略图
+  Widget _buildThumbnail(ImColorScheme colors) {
+    final url = replyInfo.thumbnailUrl ?? replyInfo.mediaUrl ?? '';
+    final isVideo = replyInfo.messageType == MessageType.video;
+
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: CachedNetworkImage(
+            imageUrl: url,
+            width: 36,
+            height: 36,
+            fit: BoxFit.cover,
+            placeholder: (context, _) => Container(
+              width: 36,
+              height: 36,
+              color: colors.surfaceVariant,
+              child: Icon(
+                isVideo ? Icons.videocam : Icons.image,
+                size: 18,
+                color: Colors.grey,
+              ),
+            ),
+            errorWidget: (context, url, error) => Container(
+              width: 36,
+              height: 36,
+              color: colors.surfaceVariant,
+              child: Icon(
+                isVideo ? Icons.videocam : Icons.broken_image,
+                size: 18,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        ),
+        // 视频播放图标
+        if (isVideo)
+          Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.5),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.play_arrow,
+              size: 12,
+              color: Colors.white,
+            ),
+          ),
+      ],
     );
   }
 }

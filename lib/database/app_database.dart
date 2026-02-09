@@ -18,6 +18,7 @@ class Conversations extends Table {
   BoolColumn get isPinned => boolean().withDefault(const Constant(false))();
   TextColumn get avatar => text().nullable()();
   TextColumn get draft => text().nullable()(); // 草稿内容
+  TextColumn get membersJson => text().nullable()(); // 群成员 JSON（用于群头像显示）
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
@@ -63,7 +64,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -78,6 +79,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         // 添加 mediaJson 字段（用于存储图片/视频/文件的本地路径等信息）
         await m.addColumn(messages, messages.mediaJson);
+      }
+      if (from < 4) {
+        // 添加 membersJson 字段（用于存储群成员头像数据）
+        await m.addColumn(conversations, conversations.membersJson);
       }
     },
   );

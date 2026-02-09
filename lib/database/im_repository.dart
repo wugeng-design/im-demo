@@ -31,6 +31,16 @@ class ImRepository {
 
   /// 保存或更新会话
   Future<void> saveConversation(models.Conversation conversation) async {
+    // 序列化 members 数据
+    String? membersJson;
+    if (conversation.members != null && conversation.members!.isNotEmpty) {
+      membersJson = jsonEncode(conversation.members!.take(9).map((m) => {
+        'id': m.id,
+        'name': m.name,
+        'avatarUrl': m.avatarUrl,
+      }).toList());
+    }
+
     await _db.upsertConversation(ConversationsCompanion(
       id: Value(conversation.id),
       name: Value(conversation.name),
@@ -40,6 +50,26 @@ class ImRepository {
       isGroup: Value(conversation.isGroup),
       isPinned: Value(conversation.isPinned),
       avatar: Value(conversation.avatar),
+      membersJson: Value(membersJson),
+      updatedAt: Value(DateTime.now()),
+    ));
+  }
+
+  /// 更新群成员数据（用于群头像显示）
+  Future<void> updateConversationMembers(
+    String conversationId,
+    List<models.ConversationMember> members,
+  ) async {
+    final membersJson = jsonEncode(members.take(9).map((m) => {
+      'id': m.id,
+      'name': m.name,
+      'avatarUrl': m.avatarUrl,
+    }).toList());
+
+    await (_db.update(_db.conversations)
+          ..where((t) => t.id.equals(conversationId)))
+        .write(ConversationsCompanion(
+      membersJson: Value(membersJson),
       updatedAt: Value(DateTime.now()),
     ));
   }
@@ -218,6 +248,21 @@ class ImRepository {
   // ===== 数据转换 =====
 
   models.Conversation _toModelConversation(Conversation db) {
+    // 解析 membersJson
+    List<models.ConversationMember>? members;
+    if (db.membersJson != null && db.membersJson!.isNotEmpty) {
+      try {
+        final list = jsonDecode(db.membersJson!) as List;
+        members = list.map((m) => models.ConversationMember(
+          id: m['id'] as String,
+          name: m['name'] as String?,
+          avatarUrl: m['avatarUrl'] as String?,
+        )).toList();
+      } catch (_) {
+        // 解析失败，忽略
+      }
+    }
+
     return models.Conversation(
       id: db.id,
       name: db.name,
@@ -228,6 +273,7 @@ class ImRepository {
       isPinned: db.isPinned,
       avatar: db.avatar,
       draft: db.draft,
+      members: members,
     );
   }
 

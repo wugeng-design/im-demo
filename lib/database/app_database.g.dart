@@ -110,6 +110,17 @@ class $ConversationsTable extends Conversations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _membersJsonMeta = const VerificationMeta(
+    'membersJson',
+  );
+  @override
+  late final GeneratedColumn<String> membersJson = GeneratedColumn<String>(
+    'members_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -145,6 +156,7 @@ class $ConversationsTable extends Conversations
     isPinned,
     avatar,
     draft,
+    membersJson,
     createdAt,
     updatedAt,
   ];
@@ -224,6 +236,15 @@ class $ConversationsTable extends Conversations
         draft.isAcceptableOrUnknown(data['draft']!, _draftMeta),
       );
     }
+    if (data.containsKey('members_json')) {
+      context.handle(
+        _membersJsonMeta,
+        membersJson.isAcceptableOrUnknown(
+          data['members_json']!,
+          _membersJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -281,6 +302,10 @@ class $ConversationsTable extends Conversations
         DriftSqlType.string,
         data['${effectivePrefix}draft'],
       ),
+      membersJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}members_json'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -308,6 +333,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final bool isPinned;
   final String? avatar;
   final String? draft;
+  final String? membersJson;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Conversation({
@@ -320,6 +346,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     required this.isPinned,
     this.avatar,
     this.draft,
+    this.membersJson,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -342,6 +369,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     }
     if (!nullToAbsent || draft != null) {
       map['draft'] = Variable<String>(draft);
+    }
+    if (!nullToAbsent || membersJson != null) {
+      map['members_json'] = Variable<String>(membersJson);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -367,6 +397,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       draft: draft == null && nullToAbsent
           ? const Value.absent()
           : Value(draft),
+      membersJson: membersJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(membersJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -387,6 +420,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       isPinned: serializer.fromJson<bool>(json['isPinned']),
       avatar: serializer.fromJson<String?>(json['avatar']),
       draft: serializer.fromJson<String?>(json['draft']),
+      membersJson: serializer.fromJson<String?>(json['membersJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -404,6 +438,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       'isPinned': serializer.toJson<bool>(isPinned),
       'avatar': serializer.toJson<String?>(avatar),
       'draft': serializer.toJson<String?>(draft),
+      'membersJson': serializer.toJson<String?>(membersJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -419,6 +454,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     bool? isPinned,
     Value<String?> avatar = const Value.absent(),
     Value<String?> draft = const Value.absent(),
+    Value<String?> membersJson = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Conversation(
@@ -433,6 +469,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     isPinned: isPinned ?? this.isPinned,
     avatar: avatar.present ? avatar.value : this.avatar,
     draft: draft.present ? draft.value : this.draft,
+    membersJson: membersJson.present ? membersJson.value : this.membersJson,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -453,6 +490,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       isPinned: data.isPinned.present ? data.isPinned.value : this.isPinned,
       avatar: data.avatar.present ? data.avatar.value : this.avatar,
       draft: data.draft.present ? data.draft.value : this.draft,
+      membersJson: data.membersJson.present
+          ? data.membersJson.value
+          : this.membersJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -470,6 +510,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('isPinned: $isPinned, ')
           ..write('avatar: $avatar, ')
           ..write('draft: $draft, ')
+          ..write('membersJson: $membersJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -487,6 +528,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     isPinned,
     avatar,
     draft,
+    membersJson,
     createdAt,
     updatedAt,
   );
@@ -503,6 +545,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           other.isPinned == this.isPinned &&
           other.avatar == this.avatar &&
           other.draft == this.draft &&
+          other.membersJson == this.membersJson &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -517,6 +560,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<bool> isPinned;
   final Value<String?> avatar;
   final Value<String?> draft;
+  final Value<String?> membersJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -530,6 +574,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.isPinned = const Value.absent(),
     this.avatar = const Value.absent(),
     this.draft = const Value.absent(),
+    this.membersJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -544,6 +589,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.isPinned = const Value.absent(),
     this.avatar = const Value.absent(),
     this.draft = const Value.absent(),
+    this.membersJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -559,6 +605,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<bool>? isPinned,
     Expression<String>? avatar,
     Expression<String>? draft,
+    Expression<String>? membersJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -573,6 +620,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       if (isPinned != null) 'is_pinned': isPinned,
       if (avatar != null) 'avatar': avatar,
       if (draft != null) 'draft': draft,
+      if (membersJson != null) 'members_json': membersJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -589,6 +637,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<bool>? isPinned,
     Value<String?>? avatar,
     Value<String?>? draft,
+    Value<String?>? membersJson,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -603,6 +652,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       isPinned: isPinned ?? this.isPinned,
       avatar: avatar ?? this.avatar,
       draft: draft ?? this.draft,
+      membersJson: membersJson ?? this.membersJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -639,6 +689,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     if (draft.present) {
       map['draft'] = Variable<String>(draft.value);
     }
+    if (membersJson.present) {
+      map['members_json'] = Variable<String>(membersJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -663,6 +716,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('isPinned: $isPinned, ')
           ..write('avatar: $avatar, ')
           ..write('draft: $draft, ')
+          ..write('membersJson: $membersJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -1851,6 +1905,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       Value<bool> isPinned,
       Value<String?> avatar,
       Value<String?> draft,
+      Value<String?> membersJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -1866,6 +1921,7 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<bool> isPinned,
       Value<String?> avatar,
       Value<String?> draft,
+      Value<String?> membersJson,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -1953,6 +2009,11 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<String> get draft => $composableBuilder(
     column: $table.draft,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get membersJson => $composableBuilder(
+    column: $table.membersJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2046,6 +2107,11 @@ class $$ConversationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get membersJson => $composableBuilder(
+    column: $table.membersJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2098,6 +2164,11 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<String> get draft =>
       $composableBuilder(column: $table.draft, builder: (column) => column);
+
+  GeneratedColumn<String> get membersJson => $composableBuilder(
+    column: $table.membersJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -2168,6 +2239,7 @@ class $$ConversationsTableTableManager
                 Value<bool> isPinned = const Value.absent(),
                 Value<String?> avatar = const Value.absent(),
                 Value<String?> draft = const Value.absent(),
+                Value<String?> membersJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2181,6 +2253,7 @@ class $$ConversationsTableTableManager
                 isPinned: isPinned,
                 avatar: avatar,
                 draft: draft,
+                membersJson: membersJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -2196,6 +2269,7 @@ class $$ConversationsTableTableManager
                 Value<bool> isPinned = const Value.absent(),
                 Value<String?> avatar = const Value.absent(),
                 Value<String?> draft = const Value.absent(),
+                Value<String?> membersJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -2209,6 +2283,7 @@ class $$ConversationsTableTableManager
                 isPinned: isPinned,
                 avatar: avatar,
                 draft: draft,
+                membersJson: membersJson,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

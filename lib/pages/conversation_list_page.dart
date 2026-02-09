@@ -4,6 +4,8 @@ import '../providers/im_provider.dart';
 import '../sdk/models/conversation.dart';
 import '../sdk/services/im_connection_service.dart' show ImConnectionState, ConnectionStateEvent;
 import '../theme/im_design_tokens.dart';
+import '../widgets/group_avatar.dart';
+import '../widgets/im_avatar.dart';
 import 'chat_detail_page.dart';
 import 'create_group_page.dart';
 import 'login_page.dart';
@@ -481,20 +483,46 @@ class _ConversationTile extends StatelessWidget {
     return null;
   }
 
+  /// 构建头像
+  Widget _buildAvatar() {
+    // 群聊：使用九宫格群头像
+    if (conversation.isGroup) {
+      // 有成员数据时显示九宫格
+      if (conversation.members != null && conversation.members!.isNotEmpty) {
+        return GroupAvatar(
+          members: conversation.members!
+              .map((m) => GroupMemberAvatar(
+                    memberId: m.id,
+                    avatarUrl: m.avatarUrl,
+                    name: m.name,
+                  ))
+              .toList(),
+          size: 48,
+        );
+      }
+      // 无成员数据时显示默认群图标
+      return GroupAvatar(
+        members: const [],
+        size: 48,
+      );
+    }
+
+    // 单聊：使用 ImAvatar
+    return ImAvatar(
+      userId: conversation.id,
+      name: conversation.name,
+      avatarUrl: conversation.avatar,
+      size: 48,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
       onTap: onTap,
       onLongPress: onLongPress,
       tileColor: conversation.isPinned ? Colors.grey[100] : null,
-      leading: CircleAvatar(
-        backgroundColor:
-            conversation.isGroup ? Colors.green[100] : Colors.blue[100],
-        child: Icon(
-          conversation.isGroup ? Icons.group : Icons.person,
-          color: conversation.isGroup ? Colors.green[700] : Colors.blue[700],
-        ),
-      ),
+      leading: _buildAvatar(),
       title: Text(
         conversation.name,
         maxLines: 1,

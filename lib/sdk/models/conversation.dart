@@ -1,3 +1,16 @@
+/// 群成员头像信息（用于群头像显示）
+class ConversationMember {
+  final String id;
+  final String? name;
+  final String? avatarUrl;
+
+  const ConversationMember({
+    required this.id,
+    this.name,
+    this.avatarUrl,
+  });
+}
+
 /// 会话模型
 class Conversation {
   final String id; // JID
@@ -9,6 +22,8 @@ class Conversation {
   final bool isPinned;
   final bool isGroup;
   final String? draft;
+  /// 群成员列表（用于群头像显示，最多9个）
+  final List<ConversationMember>? members;
 
   const Conversation({
     required this.id,
@@ -20,6 +35,7 @@ class Conversation {
     this.isPinned = false,
     this.isGroup = false,
     this.draft,
+    this.members,
   });
 
   /// 是否有草稿
@@ -35,6 +51,7 @@ class Conversation {
     bool? isPinned,
     bool? isGroup,
     String? draft,
+    List<ConversationMember>? members,
   }) {
     return Conversation(
       id: id ?? this.id,
@@ -46,6 +63,7 @@ class Conversation {
       isPinned: isPinned ?? this.isPinned,
       isGroup: isGroup ?? this.isGroup,
       draft: draft ?? this.draft,
+      members: members ?? this.members,
     );
   }
 }

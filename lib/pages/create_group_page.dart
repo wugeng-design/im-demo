@@ -97,12 +97,39 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
         _selectedJids.toList(),
       );
 
-      // 添加到本地会话列表
+      // 构建群成员列表（用于群头像显示）
+      final contacts = ref.read(contactsProvider).valueOrNull ?? [];
+      final currentJid = service.currentJid;
+      final members = <ConversationMember>[];
+
+      // 添加自己作为第一个成员
+      if (currentJid != null) {
+        members.add(ConversationMember(
+          id: currentJid,
+          name: currentJid.split('@').first,
+        ));
+      }
+
+      // 添加选中的成员
+      for (final jid in _selectedJids) {
+        final contact = contacts.firstWhere(
+          (c) => c.jid == jid,
+          orElse: () => Contact(jid: jid, name: jid.split('@').first),
+        );
+        members.add(ConversationMember(
+          id: jid,
+          name: contact.name,
+          avatarUrl: contact.avatar,
+        ));
+      }
+
+      // 添加到本地会话列表（包含成员数据）
       ref.read(conversationsProvider.notifier).upsertConversation(
             Conversation(
               id: groupJid,
               name: groupName,
               isGroup: true,
+              members: members.take(9).toList(),
             ),
           );
 

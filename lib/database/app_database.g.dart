@@ -783,6 +783,17 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _mediaJsonMeta = const VerificationMeta(
+    'mediaJson',
+  );
+  @override
+  late final GeneratedColumn<String> mediaJson = GeneratedColumn<String>(
+    'media_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -807,6 +818,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     status,
     type,
     extra,
+    mediaJson,
     createdAt,
   ];
   @override
@@ -893,6 +905,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         extra.isAcceptableOrUnknown(data['extra']!, _extraMeta),
       );
     }
+    if (data.containsKey('media_json')) {
+      context.handle(
+        _mediaJsonMeta,
+        mediaJson.isAcceptableOrUnknown(data['media_json']!, _mediaJsonMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -948,6 +966,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.string,
         data['${effectivePrefix}extra'],
       ),
+      mediaJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}media_json'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -972,6 +994,7 @@ class Message extends DataClass implements Insertable<Message> {
   final String status;
   final String type;
   final String? extra;
+  final String? mediaJson;
   final DateTime createdAt;
   const Message({
     required this.id,
@@ -984,6 +1007,7 @@ class Message extends DataClass implements Insertable<Message> {
     required this.status,
     required this.type,
     this.extra,
+    this.mediaJson,
     required this.createdAt,
   });
   @override
@@ -1000,6 +1024,9 @@ class Message extends DataClass implements Insertable<Message> {
     map['type'] = Variable<String>(type);
     if (!nullToAbsent || extra != null) {
       map['extra'] = Variable<String>(extra);
+    }
+    if (!nullToAbsent || mediaJson != null) {
+      map['media_json'] = Variable<String>(mediaJson);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -1019,6 +1046,9 @@ class Message extends DataClass implements Insertable<Message> {
       extra: extra == null && nullToAbsent
           ? const Value.absent()
           : Value(extra),
+      mediaJson: mediaJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mediaJson),
       createdAt: Value(createdAt),
     );
   }
@@ -1039,6 +1069,7 @@ class Message extends DataClass implements Insertable<Message> {
       status: serializer.fromJson<String>(json['status']),
       type: serializer.fromJson<String>(json['type']),
       extra: serializer.fromJson<String?>(json['extra']),
+      mediaJson: serializer.fromJson<String?>(json['mediaJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1056,6 +1087,7 @@ class Message extends DataClass implements Insertable<Message> {
       'status': serializer.toJson<String>(status),
       'type': serializer.toJson<String>(type),
       'extra': serializer.toJson<String?>(extra),
+      'mediaJson': serializer.toJson<String?>(mediaJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1071,6 +1103,7 @@ class Message extends DataClass implements Insertable<Message> {
     String? status,
     String? type,
     Value<String?> extra = const Value.absent(),
+    Value<String?> mediaJson = const Value.absent(),
     DateTime? createdAt,
   }) => Message(
     id: id ?? this.id,
@@ -1083,6 +1116,7 @@ class Message extends DataClass implements Insertable<Message> {
     status: status ?? this.status,
     type: type ?? this.type,
     extra: extra.present ? extra.value : this.extra,
+    mediaJson: mediaJson.present ? mediaJson.value : this.mediaJson,
     createdAt: createdAt ?? this.createdAt,
   );
   Message copyWithCompanion(MessagesCompanion data) {
@@ -1101,6 +1135,7 @@ class Message extends DataClass implements Insertable<Message> {
       status: data.status.present ? data.status.value : this.status,
       type: data.type.present ? data.type.value : this.type,
       extra: data.extra.present ? data.extra.value : this.extra,
+      mediaJson: data.mediaJson.present ? data.mediaJson.value : this.mediaJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1118,6 +1153,7 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('status: $status, ')
           ..write('type: $type, ')
           ..write('extra: $extra, ')
+          ..write('mediaJson: $mediaJson, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1135,6 +1171,7 @@ class Message extends DataClass implements Insertable<Message> {
     status,
     type,
     extra,
+    mediaJson,
     createdAt,
   );
   @override
@@ -1151,6 +1188,7 @@ class Message extends DataClass implements Insertable<Message> {
           other.status == this.status &&
           other.type == this.type &&
           other.extra == this.extra &&
+          other.mediaJson == this.mediaJson &&
           other.createdAt == this.createdAt);
 }
 
@@ -1165,6 +1203,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String> status;
   final Value<String> type;
   final Value<String?> extra;
+  final Value<String?> mediaJson;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const MessagesCompanion({
@@ -1178,6 +1217,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.status = const Value.absent(),
     this.type = const Value.absent(),
     this.extra = const Value.absent(),
+    this.mediaJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1192,6 +1232,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.status = const Value.absent(),
     this.type = const Value.absent(),
     this.extra = const Value.absent(),
+    this.mediaJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1211,6 +1252,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? status,
     Expression<String>? type,
     Expression<String>? extra,
+    Expression<String>? mediaJson,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -1225,6 +1267,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (status != null) 'status': status,
       if (type != null) 'type': type,
       if (extra != null) 'extra': extra,
+      if (mediaJson != null) 'media_json': mediaJson,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1241,6 +1284,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<String>? status,
     Value<String>? type,
     Value<String?>? extra,
+    Value<String?>? mediaJson,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -1255,6 +1299,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       status: status ?? this.status,
       type: type ?? this.type,
       extra: extra ?? this.extra,
+      mediaJson: mediaJson ?? this.mediaJson,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1293,6 +1338,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (extra.present) {
       map['extra'] = Variable<String>(extra.value);
     }
+    if (mediaJson.present) {
+      map['media_json'] = Variable<String>(mediaJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1315,6 +1363,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('status: $status, ')
           ..write('type: $type, ')
           ..write('extra: $extra, ')
+          ..write('mediaJson: $mediaJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2234,6 +2283,7 @@ typedef $$MessagesTableCreateCompanionBuilder =
       Value<String> status,
       Value<String> type,
       Value<String?> extra,
+      Value<String?> mediaJson,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -2249,6 +2299,7 @@ typedef $$MessagesTableUpdateCompanionBuilder =
       Value<String> status,
       Value<String> type,
       Value<String?> extra,
+      Value<String?> mediaJson,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -2328,6 +2379,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get extra => $composableBuilder(
     column: $table.extra,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mediaJson => $composableBuilder(
+    column: $table.mediaJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2414,6 +2470,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get mediaJson => $composableBuilder(
+    column: $table.mediaJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2481,6 +2542,9 @@ class $$MessagesTableAnnotationComposer
   GeneratedColumn<String> get extra =>
       $composableBuilder(column: $table.extra, builder: (column) => column);
 
+  GeneratedColumn<String> get mediaJson =>
+      $composableBuilder(column: $table.mediaJson, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -2546,6 +2610,7 @@ class $$MessagesTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<String> type = const Value.absent(),
                 Value<String?> extra = const Value.absent(),
+                Value<String?> mediaJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
@@ -2559,6 +2624,7 @@ class $$MessagesTableTableManager
                 status: status,
                 type: type,
                 extra: extra,
+                mediaJson: mediaJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -2574,6 +2640,7 @@ class $$MessagesTableTableManager
                 Value<String> status = const Value.absent(),
                 Value<String> type = const Value.absent(),
                 Value<String?> extra = const Value.absent(),
+                Value<String?> mediaJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
@@ -2587,6 +2654,7 @@ class $$MessagesTableTableManager
                 status: status,
                 type: type,
                 extra: extra,
+                mediaJson: mediaJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

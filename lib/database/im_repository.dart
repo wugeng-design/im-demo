@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../sdk/models/conversation.dart' as models;
 import '../sdk/models/message.dart' as models;
 import '../sdk/models/contact.dart' as models;
+import '../sdk/models/media.dart' as models;
 import 'app_database.dart';
 
 /// IM 数据仓库
@@ -121,6 +122,9 @@ class ImRepository {
       extra = jsonEncode({'replyTo': message.replyTo!.toJson()});
     }
 
+    // 序列化媒体元数据
+    final mediaJson = message.mediaJson;
+
     await _db.insertMessage(MessagesCompanion(
       id: Value(message.id),
       conversationId: Value(message.conversationId),
@@ -132,6 +136,7 @@ class ImRepository {
       status: Value(message.status ?? 'sent'),
       type: Value(message.messageType.name),
       extra: Value(extra),
+      mediaJson: Value(mediaJson),
       createdAt: Value(DateTime.now()),
     ));
   }
@@ -162,6 +167,12 @@ class ImRepository {
   /// 更新消息内容（用于编辑消息）
   Future<void> updateMessageBody(String messageId, String newBody) async {
     await _db.updateMessageBody(messageId, newBody);
+  }
+
+  /// 更新消息的媒体元数据
+  Future<void> updateMessageMedia(String messageId, models.MediaMetadata media) async {
+    final mediaJson = jsonEncode(media.toJson());
+    await _db.updateMessageMedia(messageId, mediaJson);
   }
 
   // ===== 草稿操作 =====
@@ -247,6 +258,9 @@ class ImRepository {
       }
     }
 
+    // 解析媒体元数据
+    final media = models.Message.parseMediaJson(db.mediaJson);
+
     return models.Message(
       id: db.id,
       conversationId: db.conversationId,
@@ -262,6 +276,7 @@ class ImRepository {
       ),
       isEdited: isEdited,
       replyTo: replyTo,
+      media: media,
     );
   }
 

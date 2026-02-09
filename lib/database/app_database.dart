@@ -36,7 +36,8 @@ class Messages extends Table {
   BoolColumn get isMe => boolean().withDefault(const Constant(false))();
   TextColumn get status => text().withDefault(const Constant('sent'))(); // sent, delivered, read, failed
   TextColumn get type => text().withDefault(const Constant('text'))(); // text, image, file, etc.
-  TextColumn get extra => text().nullable()(); // JSON for additional data
+  TextColumn get extra => text().nullable()(); // JSON for additional data (replyTo, edited, etc.)
+  TextColumn get mediaJson => text().nullable()(); // JSON for media metadata (localFilePath, remoteUrl, etc.)
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -62,7 +63,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -73,6 +74,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 2) {
         // 添加 draft 字段
         await m.addColumn(conversations, conversations.draft);
+      }
+      if (from < 3) {
+        // 添加 mediaJson 字段（用于存储图片/视频/文件的本地路径等信息）
+        await m.addColumn(messages, messages.mediaJson);
       }
     },
   );
@@ -239,6 +244,12 @@ class AppDatabase extends _$AppDatabase {
       body: Value(newBody),
       extra: Value('edited'),  // 标记为已编辑
     ));
+  }
+
+  /// 更新消息的媒体元数据
+  Future<void> updateMessageMedia(String messageId, String mediaJson) {
+    return (update(messages)..where((t) => t.id.equals(messageId)))
+        .write(MessagesCompanion(mediaJson: Value(mediaJson)));
   }
 
   // ===== 草稿操作 =====

@@ -61,6 +61,14 @@ class _AttachmentPanelState extends State<AttachmentPanel> {
     );
   }
 
+  // Figma 设计稿常量
+  static const double _itemSize = 60.0; // 60x60
+  static const double _iconSize = 36.0; // 36x36
+  static const double _itemRadius = 8.0; // 8px 圆角
+  static const Color _itemBackground = Color(0xFFF6F7FB); // Figma 设计稿背景色
+  static const Color _iconColor = Color(0xFF666666); // Figma 设计稿图标颜色
+  static const Color _textColor = Color(0xFF666666); // Figma 设计稿文字颜色
+
   Widget _buildOptionItem(ImColorScheme colors, AttachmentOption option) {
     return GestureDetector(
       onTap: () => _onOptionTap(option.type),
@@ -68,26 +76,26 @@ class _AttachmentPanelState extends State<AttachmentPanel> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 56,
-            height: 56,
+            width: _itemSize,
+            height: _itemSize,
             decoration: BoxDecoration(
-              color: colors.surfaceVariant,
-              borderRadius: BorderRadius.circular(12),
+              color: _itemBackground,
+              borderRadius: BorderRadius.circular(_itemRadius),
             ),
             child: Center(
               child: Icon(
                 option.icon,
-                size: 28,
-                color: colors.textSecondary,
+                size: _iconSize,
+                color: _iconColor,
               ),
             ),
           ),
           const SizedBox(height: 8),
           Text(
             option.label,
-            style: TextStyle(
-              fontSize: 12,
-              color: colors.textSecondary,
+            style: const TextStyle(
+              fontSize: 12, // Figma: 12px
+              color: _textColor,
             ),
           ),
         ],

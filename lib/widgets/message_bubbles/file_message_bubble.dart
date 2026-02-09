@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/im_design_tokens.dart';
 import '../../theme/message_styles.dart';
 import '../im_avatar.dart';
+import '../message_status_widget.dart';
 import 'message_bubble.dart';
 
 /// 文件消息气泡
@@ -98,17 +99,13 @@ class FileMessageBubble extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          // 发送失败图标
+          // 发送失败图标（同步自 Light-1-Client 样式）
           if (isSentByMe && status == MessageDisplayStatus.failed)
-            GestureDetector(
-              onTap: onRetry,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8, top: 8),
-                child: Icon(
-                  Icons.error_outline,
-                  size: 18,
-                  color: colors.error,
-                ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8, top: 8),
+              child: MessageFailedIndicator(
+                onRetry: onRetry ?? () {},
+                size: 20,
               ),
             ),
           // 文件气泡

@@ -12,6 +12,7 @@ import '../sdk/models/media.dart';
 import '../theme/im_design_tokens.dart';
 import '../widgets/message_bubbles/message_bubbles.dart';
 import '../widgets/input/input.dart';
+import '../widgets/forward_message_sheet.dart';
 import 'group_detail_page.dart';
 import 'message_search_page.dart';
 import 'media/image_preview_page.dart';
@@ -207,11 +208,65 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     }
   }
 
-  /// 转发选中的消息（显示提示）
-  void _forwardSelectedMessages() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('转发功能开发中')),
+  /// 转发选中的消息
+  Future<void> _forwardSelectedMessages() async {
+    if (_selectedMessageIds.isEmpty) return;
+
+    final messages = ref.read(messagesProvider(widget.conversationId));
+    final selectedMessages = messages
+        .where((m) => _selectedMessageIds.contains(m.id))
+        .toList();
+
+    if (selectedMessages.isEmpty) return;
+
+    // 生成预览（显示选中消息数量）
+    final preview = selectedMessages.length == 1
+        ? _getMessagePreview(selectedMessages.first)
+        : '[${selectedMessages.length}条消息]';
+
+    // 显示会话选择器
+    final targetConversation = await ForwardMessageSheet.show(
+      context: context,
+      ref: ref,
+      messagePreview: preview,
+      excludeConversationId: widget.conversationId,
     );
+
+    if (targetConversation == null) return;
+
+    // 批量转发
+    final forwarder = ref.read(messageForwarderProvider);
+    int successCount = 0;
+    int failCount = 0;
+
+    for (final message in selectedMessages) {
+      final result = await forwarder.forwardMessage(
+        message: message,
+        targetConversationId: targetConversation.id,
+        isGroupChat: targetConversation.isGroup,
+      );
+      if (result.success) {
+        successCount++;
+      } else {
+        failCount++;
+      }
+    }
+
+    if (!mounted) return;
+
+    // 退出多选模式
+    _exitSelectionMode();
+
+    // 显示结果
+    if (failCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已转发 $successCount 条消息到 ${targetConversation.name}')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('转发完成: $successCount 成功, $failCount 失败')),
+      );
+    }
   }
 
   /// 滚动监听：到达顶部时加载更多历史
@@ -340,6 +395,9 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     await repository.saveMessage(message);
     _scrollToBottom();
 
+    // 初始化上传进度
+    ref.read(uploadProgressProvider.notifier).updateProgress(messageId, 0.0);
+
     try {
       // 上传文件到服务器
       final uploadResult = await switch (type) {
@@ -347,17 +405,23 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
             messageId: messageId,
             file: file,
             onProgress: (progress) {
-              // 可以在这里更新上传进度 UI
+              ref.read(uploadProgressProvider.notifier).updateProgress(messageId, progress);
             },
           ),
         MediaType.video => uploadService.uploadVideo(
             messageId: messageId,
             file: file,
+            onProgress: (progress) {
+              ref.read(uploadProgressProvider.notifier).updateProgress(messageId, progress);
+            },
           ),
         MediaType.file => uploadService.uploadFile(
             messageId: messageId,
             file: file,
             mimeType: mimeType,
+            onProgress: (progress) {
+              ref.read(uploadProgressProvider.notifier).updateProgress(messageId, progress);
+            },
           ),
       };
 
@@ -366,6 +430,13 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       }
 
       final remoteUrl = uploadResult.remoteUrl!;
+
+      // 更新媒体元数据（保存远程 URL 和缩略图 URL）
+      final updatedMedia = media.copyWith(
+        remoteUrl: remoteUrl,
+        thumbnailUrl: uploadResult.thumbnailUrl,
+      );
+      await repository.updateMessageMedia(messageId, updatedMedia);
 
       // 发送消息到服务器
       // 消息格式: [TYPE:filename]url
@@ -391,12 +462,18 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         ),
       );
 
+      // 清除上传进度
+      ref.read(uploadProgressProvider.notifier).removeProgress(messageId);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('已发送: $fileName')),
         );
       }
     } catch (e) {
+      // 清除上传进度
+      ref.read(uploadProgressProvider.notifier).removeProgress(messageId);
+
       await repository.updateMessageStatus(messageId, 'failed');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -637,11 +714,56 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   }
 
   /// 转发消息
-  void _forwardMessage(Message message) {
-    // TODO: 实现转发逻辑（显示会话选择器）
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('转发功能开发中')),
+  Future<void> _forwardMessage(Message message) async {
+    // 获取消息预览文本
+    final preview = _getMessagePreview(message);
+
+    // 显示会话选择器
+    final targetConversation = await ForwardMessageSheet.show(
+      context: context,
+      ref: ref,
+      messagePreview: preview,
+      excludeConversationId: widget.conversationId,
     );
+
+    if (targetConversation == null) return;
+
+    // 执行转发
+    final forwarder = ref.read(messageForwarderProvider);
+    final result = await forwarder.forwardMessage(
+      message: message,
+      targetConversationId: targetConversation.id,
+      isGroupChat: targetConversation.isGroup,
+    );
+
+    if (!mounted) return;
+
+    if (result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已转发到 ${targetConversation.name}')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('转发失败: ${result.error}')),
+      );
+    }
+  }
+
+  /// 获取消息预览文本
+  String _getMessagePreview(Message message) {
+    switch (message.messageType) {
+      case MessageType.image:
+        return '[图片]';
+      case MessageType.video:
+        return '[视频]';
+      case MessageType.file:
+        return '[文件] ${message.media?.fileName ?? ''}';
+      case MessageType.system:
+        return '[系统消息]';
+      default:
+        final body = message.body;
+        return body.length > 50 ? '${body.substring(0, 50)}...' : body;
+    }
   }
 
   @override
@@ -1001,13 +1123,15 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     // 构建消息气泡内容
     Widget bubble;
 
+    // 获取上传进度
+    final uploadProgress = ref.watch(uploadProgressProvider)[message.id];
+
     // 根据消息类型选择气泡
     switch (message.messageType) {
       case MessageType.image:
         // 对于接收的图片消息，URL 存储在 body 中
         // 对于发送的图片消息，优先使用 media.remoteUrl
-        final imageUrl = message.media?.remoteUrl ??
-            (message.body.startsWith('http') ? message.body : null);
+        final imageUrl = message.media?.remoteUrl ?? _extractMediaUrl(message.body);
         bubble = ImageMessageBubble(
           isSentByMe: message.isMe,
           localFilePath: message.media?.localFilePath,
@@ -1015,6 +1139,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           width: message.media?.width?.toDouble(),
           height: message.media?.height?.toDouble(),
           status: status,
+          uploadProgress: uploadProgress,
           senderId: message.senderId,
           senderName: message.senderName,
           senderAvatar: message.senderAvatar,
@@ -1026,12 +1151,12 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       case MessageType.video:
         bubble = VideoMessageBubble(
           isSentByMe: message.isMe,
-          thumbnailPath: message.media?.thumbnailUrl,
           thumbnailUrl: message.media?.thumbnailUrl,
           duration: message.media?.duration,
           width: message.media?.width?.toDouble(),
           height: message.media?.height?.toDouble(),
           status: status,
+          uploadProgress: uploadProgress,
           senderId: message.senderId,
           senderName: message.senderName,
           senderAvatar: message.senderAvatar,
@@ -1047,6 +1172,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           fileSize: message.media?.fileSize,
           mimeType: message.media?.mimeType,
           status: status,
+          uploadProgress: uploadProgress,
           senderId: message.senderId,
           senderName: message.senderName,
           senderAvatar: message.senderAvatar,
@@ -1244,10 +1370,27 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     );
   }
 
+  /// 从消息体提取媒体 URL
+  ///
+  /// 支持两种格式:
+  /// - 直接 URL: http://...
+  /// - 带标签格式: [IMG:filename]http://... 或 [VIDEO:filename]http://...
+  String? _extractMediaUrl(String body) {
+    if (body.startsWith('http://') || body.startsWith('https://')) {
+      return body;
+    }
+    // 匹配 [TYPE:filename]url 格式
+    final regex = RegExp(r'^\[(IMG|VIDEO|FILE):[^\]]+\](.+)$');
+    final match = regex.firstMatch(body);
+    if (match != null) {
+      return match.group(2);
+    }
+    return null;
+  }
+
   void _previewImage(Message message) {
     // 获取图片 URL（优先使用 media.remoteUrl，其次使用 body）
-    final imageUrl = message.media?.remoteUrl ??
-        (message.body.startsWith('http') ? message.body : null);
+    final imageUrl = message.media?.remoteUrl ?? _extractMediaUrl(message.body);
 
     if (imageUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1271,8 +1414,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
 
   void _playVideo(Message message) {
     // 获取视频 URL（优先使用 media.remoteUrl，其次使用 body）
-    final videoUrl = message.media?.remoteUrl ??
-        (message.body.startsWith('http') ? message.body : null);
+    final videoUrl = message.media?.remoteUrl ?? _extractMediaUrl(message.body);
 
     if (videoUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1315,8 +1457,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     }
 
     // 使用远程 URL
-    final remoteUrl = message.media?.remoteUrl ??
-        (message.body.startsWith('http') ? message.body : null);
+    final remoteUrl = message.media?.remoteUrl ?? _extractMediaUrl(message.body);
 
     if (remoteUrl != null) {
       try {

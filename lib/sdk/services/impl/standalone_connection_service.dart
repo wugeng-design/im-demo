@@ -215,6 +215,9 @@ class StandaloneConnectionService implements ImConnectionService {
   /// 获取保存的配置（用于其他服务获取服务器地址）
   ImSdkConfig? get savedConfig => _savedConfig;
 
+  /// 获取 Whixp 实例（用于 XEP-0363 文件上传等）
+  Whixp? get whixp => _whixp;
+
   @override
   bool get isConnected => _currentState == ImConnectionState.authenticated;
 

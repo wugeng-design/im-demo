@@ -45,6 +45,16 @@ class ImDesignTokens {
 
     // 未读标记
     unreadBadge: Color(0xFFFA5151),
+    unreadDot: Color(0xFFFA5151),
+
+    // 在线状态
+    statusOnline: Color(0xFF00D26A),
+    statusOffline: Color(0xFFAAAAAA),
+    statusBusy: Color(0xFFFAAD14),
+
+    // 滑动操作颜色
+    slidableMute: Color(0xFFC7C7CC),
+    slidableDelete: Color(0xFFFF3B30),
   );
 
   /// Dark 主题颜色
@@ -80,14 +90,24 @@ class ImDesignTokens {
 
     // 未读标记
     unreadBadge: Color(0xFFFF453A),
+    unreadDot: Color(0xFFFF453A),
+
+    // 在线状态
+    statusOnline: Color(0xFF32E875),
+    statusOffline: Color(0xFF636366),
+    statusBusy: Color(0xFFFFD60A),
+
+    // 滑动操作颜色
+    slidableMute: Color(0xFF8E8E93),
+    slidableDelete: Color(0xFFFF453A),
   );
 
   // ========== 尺寸系统 ==========
 
   /// Avatar 尺寸
   static const double avatarSizeSmall = 32.0;
-  static const double avatarSizeMedium = 40.0;
-  static const double avatarSizeLarge = 54.0;
+  static const double avatarSizeMedium = 54.0; // 会话列表
+  static const double avatarSizeLarge = 60.0; // 用户详情
 
   /// Badge 尺寸
   static const double badgeSize = 18.0;
@@ -98,21 +118,33 @@ class ImDesignTokens {
   static const double iconSizeMedium = 20.0;
   static const double iconSizeLarge = 24.0;
 
+  /// 消息气泡最大宽度（占屏幕比例）
+  static const double messageBubbleMaxWidthRatio = 0.7;
+
   // ========== 间距系统 ==========
 
+  /// 4px 递增间距体系
   static const double spacing4 = 4.0;
   static const double spacing8 = 8.0;
   static const double spacing12 = 12.0;
   static const double spacing16 = 16.0;
   static const double spacing20 = 20.0;
   static const double spacing24 = 24.0;
+  static const double spacing32 = 32.0;
+
+  /// 页面边距
+  static const double pagePadding = 16.0;
+
+  /// 卡片内边距
+  static const double cardPadding = 12.0;
 
   // ========== 圆角系统 ==========
 
+  /// 圆角半径（微信风格：较小圆角）
   static const double radiusSmall = 4.0;
-  static const double radiusMedium = 8.0;
-  static const double radiusLarge = 12.0;
-  static const double radiusRound = 999.0;
+  static const double radiusMedium = 6.0; // 消息气泡
+  static const double radiusLarge = 8.0; // 卡片
+  static const double radiusRound = 999.0; // 圆形（头像、Badge）
 
   static const BorderRadius borderRadiusSmall =
       BorderRadius.all(Radius.circular(radiusSmall));
@@ -120,12 +152,40 @@ class ImDesignTokens {
       BorderRadius.all(Radius.circular(radiusMedium));
   static const BorderRadius borderRadiusLarge =
       BorderRadius.all(Radius.circular(radiusLarge));
+  static const BorderRadius borderRadiusRound =
+      BorderRadius.all(Radius.circular(radiusRound));
+
+  // ========== 字体系统 ==========
+
+  /// 字体大小
+  static const double fontSizeCaption = 12.0; // 辅助文本（时间）
+  static const double fontSizeBody = 14.0; // 正文（消息内容）
+  static const double fontSizeSubtitle = 15.0; // 副标题（会话摘要）
+  static const double fontSizeTitle = 17.0; // 标题（会话名称）
+  static const double fontSizeHeadline = 18.0; // 大标题（页面标题）
+
+  /// 字体粗细
+  static const FontWeight fontWeightRegular = FontWeight.w400;
+  static const FontWeight fontWeightMedium = FontWeight.w500;
+  static const FontWeight fontWeightBold = FontWeight.w600;
 
   // ========== 动画时长 ==========
 
   static const Duration durationFast = Duration(milliseconds: 150);
   static const Duration durationNormal = Duration(milliseconds: 250);
   static const Duration durationSlow = Duration(milliseconds: 350);
+
+  // ========== 阴影 ==========
+
+  /// 卡片阴影
+  static const List<BoxShadow> cardShadow = [
+    BoxShadow(
+      color: Color(0x0A000000), // 黑色 4% 透明度
+      offset: Offset(0, 2),
+      blurRadius: 8,
+      spreadRadius: 0,
+    ),
+  ];
 
   // ========== 辅助方法 ==========
 
@@ -137,6 +197,8 @@ class ImDesignTokens {
 }
 
 /// IM 颜色方案
+///
+/// 不可变的颜色定义，支持 Light/Dark 主题
 class ImColorScheme {
   const ImColorScheme({
     required this.primary,
@@ -157,6 +219,12 @@ class ImColorScheme {
     required this.messageBubbleSent,
     required this.messageBubbleReceived,
     required this.unreadBadge,
+    required this.unreadDot,
+    required this.statusOnline,
+    required this.statusOffline,
+    required this.statusBusy,
+    required this.slidableMute,
+    required this.slidableDelete,
   });
 
   // 主色
@@ -190,4 +258,14 @@ class ImColorScheme {
 
   // 未读标记
   final Color unreadBadge;
+  final Color unreadDot;
+
+  // 在线状态
+  final Color statusOnline;
+  final Color statusOffline;
+  final Color statusBusy;
+
+  // 滑动操作颜色
+  final Color slidableMute;
+  final Color slidableDelete;
 }

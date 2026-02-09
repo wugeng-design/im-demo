@@ -29,6 +29,12 @@ class MessageStyles {
   /// 图片消息最小尺寸
   static const double imageMinSize = 100.0;
 
+  /// 消息间距（Figma 设计稿: 18px gap）
+  static const double messageGap = 18.0;
+
+  /// 消息垂直间距 (单边 9px，总间距 18px)
+  static const double messageVerticalPadding = 9.0;
+
   // ===========================================================================
   // BorderRadius 常量
   // ===========================================================================
@@ -55,12 +61,24 @@ class MessageStyles {
   /// 小圆角 (4px)
   static const smallRadius = BorderRadius.all(Radius.circular(4));
 
+  /// 系统消息圆角 (12px)
+  static const systemMessageRadius = BorderRadius.all(Radius.circular(12));
+
   // ===========================================================================
   // EdgeInsets 常量
   // ===========================================================================
 
   /// 消息气泡内边距
   static const bubblePadding = EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+
+  /// 系统消息外边距
+  static const systemMessagePadding = EdgeInsets.symmetric(vertical: 8);
+
+  /// 系统消息内边距
+  static const systemMessageInnerPadding = EdgeInsets.symmetric(
+    horizontal: 12,
+    vertical: 4,
+  );
 
   /// 时间戳区域内边距
   static const timePadding = EdgeInsets.only(left: 12, right: 12, bottom: 8);
@@ -130,6 +148,14 @@ class MessageStyles {
     return BoxDecoration(
       color: color,
       borderRadius: smallRadius,
+    );
+  }
+
+  /// 系统消息装饰
+  static BoxDecoration systemMessage(Color color) {
+    return BoxDecoration(
+      color: color,
+      borderRadius: systemMessageRadius,
     );
   }
 }

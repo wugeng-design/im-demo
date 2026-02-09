@@ -1065,12 +1065,17 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     );
   }
 
+  /// 构建时间分隔栏（微信风格）
   Widget _buildTimeHeader(DateTime time, ImColorScheme colors) {
-    return Padding(
+    return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
+      alignment: Alignment.center,
       child: Text(
         _formatMessageTime(time),
-        style: TextStyle(color: colors.textTertiary, fontSize: 12),
+        style: TextStyle(
+          color: colors.textSecondary,
+          fontSize: 12,
+        ),
       ),
     );
   }
@@ -1208,20 +1213,36 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         );
 
       case MessageType.text:
-        bubble = MessageBubble(
-          body: message.body,
-          timestamp: message.timestamp,
-          isSentByMe: message.isMe,
-          status: status,
-          senderId: message.senderId,
-          senderName: message.senderName,
-          senderAvatar: message.senderAvatar,
-          showSenderName: widget.isGroup && !message.isMe,
-          showAvatar: showAvatar,
-          isEdited: message.isEdited,
-          replyTo: message.replyTo,
-          onRetry: onRetry,
-        );
+        // 回复消息使用 ReplyMessageBubble（Light-1-Client 样式）
+        if (message.replyTo != null) {
+          bubble = ReplyMessageBubble(
+            text: message.body,
+            replyInfo: message.replyTo!,
+            isSentByMe: message.isMe,
+            timestamp: message.timestamp,
+            status: message.status,
+            senderId: message.senderId,
+            senderName: message.senderName,
+            senderAvatar: message.senderAvatar,
+            showSenderName: widget.isGroup && !message.isMe,
+            showAvatar: showAvatar,
+            onRetry: onRetry,
+          );
+        } else {
+          bubble = MessageBubble(
+            body: message.body,
+            timestamp: message.timestamp,
+            isSentByMe: message.isMe,
+            status: status,
+            senderId: message.senderId,
+            senderName: message.senderName,
+            senderAvatar: message.senderAvatar,
+            showSenderName: widget.isGroup && !message.isMe,
+            showAvatar: showAvatar,
+            isEdited: message.isEdited,
+            onRetry: onRetry,
+          );
+        }
     }
 
     // 包装手势检测和多选 UI
@@ -1280,28 +1301,36 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   }
 
   /// 构建编辑/回复指示栏
+  ///
+  /// Light-1-Client 样式：
+  /// - 左侧彩色指示条（4px x 32px）
+  /// - surfaceVariant 背景
+  /// - 底部边框
   Widget _buildEditReplyBar(ImColorScheme colors) {
     final isEditing = _editingMessage != null;
     final message = _editingMessage ?? _replyingMessage;
     if (message == null) return const SizedBox.shrink();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: colors.surface,
+        color: colors.surfaceVariant,
         border: Border(
-          top: BorderSide(color: colors.divider, width: 0.5),
+          bottom: BorderSide(color: colors.divider, width: 0.5),
         ),
       ),
       child: Row(
         children: [
-          // 图标
-          Icon(
-            isEditing ? Icons.edit : Icons.reply,
-            size: 18,
-            color: colors.primary,
+          // 左侧指示条（Light-1-Client 样式）
+          Container(
+            width: 4,
+            height: 32,
+            decoration: BoxDecoration(
+              color: isEditing ? colors.primary : colors.textSecondary,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           // 标签和内容
           Expanded(
             child: Column(
@@ -1316,11 +1345,12 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   message.displayBody,
                   style: TextStyle(
                     color: colors.textSecondary,
-                    fontSize: 12,
+                    fontSize: 14, // Light-1-Client: 14px
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1335,8 +1365,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               padding: const EdgeInsets.all(4),
               child: Icon(
                 Icons.close,
-                size: 18,
-                color: colors.textTertiary,
+                size: 20,
+                color: colors.textSecondary,
               ),
             ),
           ),
@@ -1539,16 +1569,42 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     );
   }
 
+  /// 格式化时间分隔符文本（微信风格）
+  ///
+  /// 显示规则：
+  /// - 今天：14:30
+  /// - 昨天：昨天 14:30
+  /// - 本周：星期一 14:30
+  /// - 今年：12月15日 14:30
+  /// - 更早：2024年12月15日 14:30
   String _formatMessageTime(DateTime time) {
     final now = DateTime.now();
-    final diff = now.difference(time);
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final messageDate = DateTime(time.year, time.month, time.day);
+    final timeStr = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
 
-    if (diff.inDays == 0) {
-      return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-    } else if (diff.inDays == 1) {
-      return '昨天 ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    if (messageDate == today) {
+      // 今天只显示时间
+      return timeStr;
+    } else if (messageDate == yesterday) {
+      // 昨天
+      return '昨天 $timeStr';
+    } else if (today.difference(messageDate).inDays < 7) {
+      // 本周显示星期几
+      return '${_getWeekday(time.weekday)} $timeStr';
+    } else if (time.year == now.year) {
+      // 今年显示月日
+      return '${time.month}月${time.day}日 $timeStr';
     } else {
-      return '${time.month}/${time.day} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+      // 更早显示完整日期
+      return '${time.year}年${time.month}月${time.day}日 $timeStr';
     }
+  }
+
+  /// 获取星期几的中文名称
+  String _getWeekday(int weekday) {
+    const weekdays = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
+    return weekdays[weekday - 1];
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../theme/im_design_tokens.dart';
 import 'attachment_models.dart';
 import 'attachment_panel.dart';
+import 'emoji_panel.dart';
 
 /// 消息输入区域
 class MessageInputArea extends StatefulWidget {
@@ -52,6 +53,7 @@ class MessageInputAreaState extends State<MessageInputArea> {
   late final TextEditingController _textController;
   late final FocusNode _focusNode;
   bool _showAttachmentPanel = false;
+  bool _showEmojiPanel = false;
   bool _hasText = false;
 
   /// 获取当前文本
@@ -118,18 +120,18 @@ class MessageInputAreaState extends State<MessageInputArea> {
             left: 8,
             right: 8,
             top: 8,
-            bottom: _showAttachmentPanel ? 8 : bottomPadding + 8,
+            bottom: (_showAttachmentPanel || _showEmojiPanel) ? 8 : bottomPadding + 8,
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // 附件按钮
+              // Emoji 按钮
               IconButton(
                 icon: Icon(
-                  _showAttachmentPanel ? Icons.keyboard : Icons.add_circle_outline,
-                  color: colors.textSecondary,
+                  _showEmojiPanel ? Icons.keyboard_outlined : Icons.emoji_emotions_outlined,
+                  color: _showEmojiPanel ? colors.primary : colors.textSecondary,
                 ),
-                onPressed: _toggleAttachmentPanel,
+                onPressed: _toggleEmojiPanel,
               ),
               // 输入框
               Expanded(
@@ -153,16 +155,21 @@ class MessageInputAreaState extends State<MessageInputArea> {
                       ),
                       border: InputBorder.none,
                     ),
-                    onTap: _hideAttachmentPanel,
+                    onTap: _hidePanels,
                   ),
                 ),
               ),
               const SizedBox(width: 8),
-              // 发送按钮
-              _buildSendButton(colors),
+              // 发送按钮 或 附件按钮
+              _buildSendOrAttachmentButton(colors),
             ],
           ),
         ),
+        // Emoji 面板
+        if (_showEmojiPanel)
+          EmojiPanel(
+            onEmojiSelected: _onEmojiSelected,
+          ),
         // 附件面板
         if (_showAttachmentPanel)
           AttachmentPanel(
@@ -172,6 +179,20 @@ class MessageInputAreaState extends State<MessageInputArea> {
                 : null,
           ),
       ],
+    );
+  }
+
+  /// 构建发送按钮或附件按钮（根据输入内容切换）
+  Widget _buildSendOrAttachmentButton(ImColorScheme colors) {
+    if (_hasText) {
+      return _buildSendButton(colors);
+    }
+    return IconButton(
+      icon: Icon(
+        _showAttachmentPanel ? Icons.close : Icons.add_circle_outline,
+        color: _showAttachmentPanel ? colors.primary : colors.textSecondary,
+      ),
+      onPressed: _toggleAttachmentPanel,
     );
   }
 
@@ -204,19 +225,55 @@ class MessageInputAreaState extends State<MessageInputArea> {
     );
   }
 
-  void _toggleAttachmentPanel() {
+  void _toggleEmojiPanel() {
     setState(() {
-      _showAttachmentPanel = !_showAttachmentPanel;
-      if (_showAttachmentPanel) {
+      _showEmojiPanel = !_showEmojiPanel;
+      if (_showEmojiPanel) {
+        _showAttachmentPanel = false;
         _focusNode.unfocus();
       }
     });
   }
 
-  void _hideAttachmentPanel() {
-    if (_showAttachmentPanel) {
-      setState(() => _showAttachmentPanel = false);
+  void _toggleAttachmentPanel() {
+    setState(() {
+      _showAttachmentPanel = !_showAttachmentPanel;
+      if (_showAttachmentPanel) {
+        _showEmojiPanel = false;
+        _focusNode.unfocus();
+      }
+    });
+  }
+
+  void _hidePanels() {
+    if (_showAttachmentPanel || _showEmojiPanel) {
+      setState(() {
+        _showAttachmentPanel = false;
+        _showEmojiPanel = false;
+      });
     }
+  }
+
+  /// 插入 Emoji 到当前光标位置
+  void _onEmojiSelected(String emoji) {
+    final text = _textController.text;
+    final selection = _textController.selection;
+
+    // 如果没有有效选择，在末尾插入
+    if (!selection.isValid) {
+      _textController.text = '$text$emoji';
+      _textController.selection = TextSelection.collapsed(
+        offset: _textController.text.length,
+      );
+      return;
+    }
+
+    // 在选择位置插入 emoji（替换选中内容）
+    final newText = text.replaceRange(selection.start, selection.end, emoji);
+    _textController.text = newText;
+    _textController.selection = TextSelection.collapsed(
+      offset: selection.start + emoji.length,
+    );
   }
 
   Future<void> _onSend() async {

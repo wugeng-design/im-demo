@@ -7,3 +7,4 @@ export 'video_message_bubble.dart';
 export 'file_message_bubble.dart';
 export 'recalled_message_bubble.dart';
 export 'message_action_menu.dart';
+export 'quote_bubble.dart';

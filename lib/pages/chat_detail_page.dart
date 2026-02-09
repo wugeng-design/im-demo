@@ -250,9 +250,24 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   }
 
   Future<void> _sendTextMessage(String text) async {
+    // 如果有回复消息，创建 ReplyInfo
+    ReplyInfo? replyTo;
+    if (_replyingMessage != null) {
+      replyTo = ReplyInfo(
+        messageId: _replyingMessage!.id,
+        senderName: _replyingMessage!.senderName,
+        body: _replyingMessage!.displayBody,
+        messageType: _replyingMessage!.messageType,
+      );
+      // 清除回复状态
+      setState(() {
+        _replyingMessage = null;
+      });
+    }
+
     await ref
         .read(messagesProvider(widget.conversationId).notifier)
-        .sendMessage(text);
+        .sendMessage(text, replyTo: replyTo);
     // 发送成功后清除草稿
     await _clearDraft();
     _scrollToBottom();
@@ -1078,6 +1093,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           showSenderName: widget.isGroup && !message.isMe,
           showAvatar: showAvatar,
           isEdited: message.isEdited,
+          replyTo: message.replyTo,
           onRetry: onRetry,
         );
     }

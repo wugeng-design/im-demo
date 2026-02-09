@@ -260,11 +260,12 @@ class StandaloneConnectionService implements ImConnectionService {
 
       print('[Whixp] Creating connection with host=${config.host}, port=${config.port}, useTLS=${config.useTls}');
 
-      // 禁用 STARTTLS（服务器已配置为不要求 TLS）
-      // 如果服务器要求 TLS，设置 useTls=true 使用 DirectTLS
-      final shouldDisableStartTLS = !config.useTls;
+      // useTls=true: DirectTLS 连接（端口 5223，直接 TLS）
+      // useTls=false: 明文连接（端口 5222，不使用任何 TLS）
+      // 总是禁用 STARTTLS，因为 Whixp 的证书回调在 STARTTLS 升级时不生效
+      const shouldDisableStartTLS = true;
 
-      print('[Whixp] disableStartTLS: $shouldDisableStartTLS');
+      print('[Whixp] disableStartTLS: $shouldDisableStartTLS (always disabled)');
 
       _whixp = Whixp(
         jabberID: fullCredentials.jid,

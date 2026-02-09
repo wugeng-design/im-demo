@@ -530,7 +530,7 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
     state = [...state, message];
   }
 
-  Future<void> sendMessage(String body) async {
+  Future<void> sendMessage(String body, {ReplyInfo? replyTo}) async {
     final service = ref.read(imConnectionServiceProvider);
     final repository = ref.read(repositoryProvider);
     final currentJid = service.currentJid;
@@ -546,6 +546,7 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
       timestamp: DateTime.now(),
       isMe: true,
       status: 'sending',
+      replyTo: replyTo,
     );
 
     // 保存到数据库（会触发 UI 更新）

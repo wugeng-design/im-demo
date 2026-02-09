@@ -87,7 +87,7 @@ class EjabberdApiClient {
   /// 返回格式: [{jid, nick, role}, ...]
   Future<List<MucOccupant>> getRoomOccupants(String room, String service) async {
     final result = await _request('get_room_occupants', {
-      'room': room,
+      'name': room,
       'service': service,
     });
 
@@ -102,7 +102,7 @@ class EjabberdApiClient {
   Future<List<MucAffiliation>> getRoomAffiliations(
       String room, String service) async {
     final result = await _request('get_room_affiliations', {
-      'room': room,
+      'name': room,
       'service': service,
     });
 
@@ -122,23 +122,17 @@ class EjabberdApiClient {
   /// - outcast: 黑名单
   /// - none: 非成员（移除）
   ///
-  /// 注意: ejabberd 24.12+ 版本使用 room + user/host 参数
+  /// 注意: ejabberd API 使用 name + service + jid 参数
   Future<void> setRoomAffiliation(
     String room,
     String service,
     String jid,
     String affiliation,
   ) async {
-    // 解析 jid 为 user 和 host
-    final parts = jid.split('@');
-    final user = parts[0];
-    final host = parts.length > 1 ? parts[1] : 'localhost';
-
     await _request('set_room_affiliation', {
-      'room': room,
+      'name': room,
       'service': service,
-      'user': user,
-      'host': host,
+      'jid': jid,
       'affiliation': affiliation,
     });
   }
@@ -163,7 +157,7 @@ class EjabberdApiClient {
   Future<void> destroyRoom(String room, String service,
       {String? reason}) async {
     await _request('destroy_room', {
-      'room': room,
+      'name': room,
       'service': service,
     });
   }
@@ -183,7 +177,7 @@ class EjabberdApiClient {
     String value,
   ) async {
     await _request('change_room_option', {
-      'room': room,
+      'name': room,
       'service': service,
       'option': option,
       'value': value,
@@ -194,7 +188,7 @@ class EjabberdApiClient {
   Future<Map<String, dynamic>> getRoomOptions(
       String room, String service) async {
     final result = await _request('get_room_options', {
-      'room': room,
+      'name': room,
       'service': service,
     });
 
@@ -220,7 +214,7 @@ class EjabberdApiClient {
     Map<String, dynamic>? options,
   }) async {
     await _request('create_room', {
-      'room': room,
+      'name': room,
       'service': service,
       'host': host,
     });

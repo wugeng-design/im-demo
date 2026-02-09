@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart' hide Conversation, Message, Contact;
@@ -6,8 +7,9 @@ import '../database/im_repository.dart';
 import '../sdk/models/conversation.dart';
 import '../sdk/models/message.dart';
 import '../sdk/models/contact.dart';
+import '../sdk/models/media.dart';
 import '../sdk/services/impl/standalone_connection_service.dart';
-import '../sdk/services/impl/http_upload_service.dart';
+import '../sdk/services/impl/xep0363_upload_service.dart';
 import '../sdk/services/im_connection_service.dart';
 import '../sdk/services/media_upload_service.dart';
 import '../sdk/services/reconnect_manager.dart';
@@ -35,17 +37,21 @@ final imConnectionServiceProvider = Provider<StandaloneConnectionService>((ref) 
 
 /// 媒体上传服务 Provider
 ///
-/// 根据连接服务的配置自动创建上传服务
+/// 使用 XEP-0363 HTTP File Upload 协议
+/// 通过 XMPP IQ 请求上传 slot，然后 PUT 到服务器
 final mediaUploadServiceProvider = Provider<MediaUploadService>((ref) {
   final connectionService = ref.watch(imConnectionServiceProvider);
   final config = connectionService.savedConfig;
+  final whixp = connectionService.whixp;
 
-  // 使用 ejabberd HTTP Upload 服务
-  // 上传 URL 格式: http://host:5443/upload/localhost
-  final host = config?.host ?? 'localhost';
-  final uploadUrl = 'http://$host:5443/upload/localhost';
+  // 需要 whixp 实例和 domain 才能创建上传服务
+  if (whixp == null) {
+    // 返回一个空实现，等待连接建立
+    return _PlaceholderUploadService();
+  }
 
-  final service = HttpUploadService(uploadBaseUrl: uploadUrl);
+  final domain = config?.domain ?? 'localhost';
+  final service = Xep0363UploadService(domain: domain, whixp: whixp);
   ref.onDispose(() => service.dispose());
   return service;
 });
@@ -678,6 +684,151 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
   }
 }
 
+/// 转发消息结果
+class ForwardMessageResult {
+  final bool success;
+  final String? messageId;
+  final String? error;
+
+  const ForwardMessageResult._({
+    required this.success,
+    this.messageId,
+    this.error,
+  });
+
+  factory ForwardMessageResult.success(String messageId) =>
+      ForwardMessageResult._(success: true, messageId: messageId);
+
+  factory ForwardMessageResult.failure(String error) =>
+      ForwardMessageResult._(success: false, error: error);
+}
+
+/// 消息转发服务
+///
+/// 将消息转发到其他会话
+class MessageForwarder {
+  final Ref ref;
+
+  MessageForwarder(this.ref);
+
+  /// 转发消息
+  ///
+  /// [message] 要转发的消息
+  /// [targetConversationId] 目标会话 ID
+  /// [isGroupChat] 是否群聊
+  Future<ForwardMessageResult> forwardMessage({
+    required Message message,
+    required String targetConversationId,
+    required bool isGroupChat,
+  }) async {
+    final service = ref.read(imConnectionServiceProvider);
+    final repository = ref.read(repositoryProvider);
+    final currentJid = service.currentJid;
+
+    if (currentJid == null) {
+      return ForwardMessageResult.failure('未连接到服务器');
+    }
+
+    final newMessageId = DateTime.now().millisecondsSinceEpoch.toString();
+    final now = DateTime.now();
+
+    // 构建转发消息体
+    String forwardBody = message.body;
+    MessageType messageType = message.messageType;
+    MediaMetadata? media;
+
+    // 处理媒体消息
+    if (message.messageType == MessageType.image ||
+        message.messageType == MessageType.video ||
+        message.messageType == MessageType.file) {
+      // 复制媒体信息（使用远程 URL）
+      if (message.media != null) {
+        media = MediaMetadata(
+          type: message.media!.type,
+          remoteUrl: message.media!.remoteUrl,
+          thumbnailUrl: message.media!.thumbnailUrl,
+          fileName: message.media!.fileName,
+          mimeType: message.media!.mimeType,
+          fileSize: message.media!.fileSize,
+          width: message.media!.width,
+          height: message.media!.height,
+          duration: message.media!.duration,
+        );
+      }
+    }
+
+    // 创建新消息
+    final forwardedMessage = Message(
+      id: newMessageId,
+      conversationId: targetConversationId,
+      senderId: currentJid,
+      senderName: currentJid.split('@').first,
+      body: forwardBody,
+      timestamp: now,
+      isMe: true,
+      status: 'sending',
+      messageType: messageType,
+      media: media,
+    );
+
+    try {
+      // 保存到数据库
+      await repository.saveMessage(forwardedMessage);
+
+      // 发送到服务器
+      await service.sendMessage(
+        targetConversationId,
+        forwardBody,
+        isGroupChat: isGroupChat,
+      );
+
+      // 更新消息状态
+      await repository.updateMessageStatus(newMessageId, 'sent');
+
+      // 更新目标会话的最后消息
+      final existingConversation = ref.read(conversationsProvider).firstWhere(
+        (c) => c.id == targetConversationId,
+        orElse: () => Conversation(
+          id: targetConversationId,
+          name: isGroupChat ? '群聊' : targetConversationId.split('@').first,
+          isGroup: isGroupChat,
+        ),
+      );
+
+      await ref.read(conversationsProvider.notifier).upsertConversation(
+        existingConversation.copyWith(
+          lastMessage: _getPreviewText(forwardBody, messageType),
+          lastMessageTime: now,
+        ),
+      );
+
+      return ForwardMessageResult.success(newMessageId);
+    } catch (e) {
+      await repository.updateMessageStatus(newMessageId, 'failed');
+      return ForwardMessageResult.failure(e.toString());
+    }
+  }
+
+  /// 获取消息预览文本
+  String _getPreviewText(String body, MessageType type) {
+    switch (type) {
+      case MessageType.image:
+        return '[图片]';
+      case MessageType.video:
+        return '[视频]';
+      case MessageType.file:
+        return '[文件]';
+      default:
+        return body.length > 50 ? '${body.substring(0, 50)}...' : body;
+    }
+  }
+}
+
+/// 消息转发 Provider
+final messageForwarderProvider = Provider<MessageForwarder>((ref) {
+  return MessageForwarder(ref);
+});
+
 /// 联系人列表 Provider (从服务器获取)
 final contactsProvider = FutureProvider<List<Contact>>((ref) async {
   final service = ref.watch(imConnectionServiceProvider);
@@ -712,4 +863,77 @@ class _ParsedMediaMessage {
     required this.fileName,
     required this.url,
   });
+}
+
+/// 上传进度 Provider
+///
+/// 跟踪每个消息的上传进度 (0.0 - 1.0)
+final uploadProgressProvider = StateNotifierProvider<UploadProgressNotifier, Map<String, double>>((ref) {
+  return UploadProgressNotifier();
+});
+
+class UploadProgressNotifier extends StateNotifier<Map<String, double>> {
+  UploadProgressNotifier() : super({});
+
+  /// 更新上传进度
+  void updateProgress(String messageId, double progress) {
+    state = {...state, messageId: progress};
+  }
+
+  /// 移除上传进度（上传完成或失败后调用）
+  void removeProgress(String messageId) {
+    final newState = Map<String, double>.from(state);
+    newState.remove(messageId);
+    state = newState;
+  }
+
+  /// 获取指定消息的上传进度
+  double? getProgress(String messageId) => state[messageId];
+}
+
+/// 占位上传服务（未连接时使用）
+class _PlaceholderUploadService implements MediaUploadService {
+  @override
+  Future<MediaUploadResult> uploadImage({
+    required String messageId,
+    required File file,
+    UploadProgressCallback? onProgress,
+  }) async {
+    return MediaUploadResult.failure('未连接到服务器');
+  }
+
+  @override
+  Future<MediaUploadResult> uploadVideo({
+    required String messageId,
+    required File file,
+    UploadProgressCallback? onProgress,
+  }) async {
+    return MediaUploadResult.failure('未连接到服务器');
+  }
+
+  @override
+  Future<MediaUploadResult> uploadFile({
+    required String messageId,
+    required File file,
+    required String mimeType,
+    UploadProgressCallback? onProgress,
+  }) async {
+    return MediaUploadResult.failure('未连接到服务器');
+  }
+
+  @override
+  bool cancelUpload(String messageId) => false;
+
+  @override
+  Future<MediaUploadResult> retryUpload(String messageId) async {
+    return MediaUploadResult.failure('未连接到服务器');
+  }
+
+  @override
+  UploadTask? getUploadTask(String messageId) => null;
+
+  @override
+  Stream<UploadTask> get uploadTaskStream => const Stream.empty();
+
+  void dispose() {}
 }

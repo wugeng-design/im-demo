@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/im_provider.dart';
 import '../sdk/models/contact.dart';
+import '../sdk/models/conversation.dart';
 import '../sdk/services/impl/standalone_connection_service.dart';
 import '../theme/im_design_tokens.dart';
 import '../widgets/im_avatar.dart';
@@ -65,6 +66,9 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
           }).toList();
           _isLoading = false;
         });
+
+        // 更新会话的群成员数据（用于群头像显示）
+        _updateConversationMembers();
       } catch (e) {
         print('[GroupDetail] 加载群成员失败: $e');
         // 加载失败时使用空列表
@@ -86,7 +90,23 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
         ];
         _isLoading = false;
       });
+
+      // 更新会话的群成员数据（用于群头像显示）
+      _updateConversationMembers();
     }
+  }
+
+  /// 更新会话的群成员数据（用于群头像显示）
+  Future<void> _updateConversationMembers() async {
+    if (_members.isEmpty) return;
+
+    final repository = ref.read(repositoryProvider);
+    final conversationMembers = _members.take(9).map((m) => ConversationMember(
+      id: m.jid,
+      name: m.name,
+    )).toList();
+
+    await repository.updateConversationMembers(widget.groupId, conversationMembers);
   }
 
   @override

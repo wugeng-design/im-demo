@@ -25,11 +25,27 @@ class ReplyInfo {
   /// 被回复消息的类型
   final MessageType messageType;
 
+  /// 缩略图 URL（图片/视频消息）
+  final String? thumbnailUrl;
+
+  /// 媒体文件 URL（图片/视频/文件）
+  final String? mediaUrl;
+
+  /// 文件名（文件消息）
+  final String? fileName;
+
+  /// 是否已撤回
+  final bool isRetracted;
+
   const ReplyInfo({
     required this.messageId,
     required this.senderName,
     required this.body,
     this.messageType = MessageType.text,
+    this.thumbnailUrl,
+    this.mediaUrl,
+    this.fileName,
+    this.isRetracted = false,
   });
 
   factory ReplyInfo.fromJson(Map<String, dynamic> json) {
@@ -41,6 +57,10 @@ class ReplyInfo {
         (t) => t.name == json['messageType'],
         orElse: () => MessageType.text,
       ),
+      thumbnailUrl: json['thumbnailUrl'] as String?,
+      mediaUrl: json['mediaUrl'] as String?,
+      fileName: json['fileName'] as String?,
+      isRetracted: json['isRetracted'] as bool? ?? false,
     );
   }
 
@@ -50,22 +70,26 @@ class ReplyInfo {
       'senderName': senderName,
       'body': body,
       'messageType': messageType.name,
+      'thumbnailUrl': thumbnailUrl,
+      'mediaUrl': mediaUrl,
+      'fileName': fileName,
+      'isRetracted': isRetracted,
     };
   }
 
   /// 获取显示文本
   String get displayBody {
+    if (isRetracted) return '消息已撤回';
     switch (messageType) {
       case MessageType.image:
         return '[图片]';
       case MessageType.video:
         return '[视频]';
       case MessageType.file:
-        return '[文件]';
+        return fileName != null ? '[文件] $fileName' : '[文件]';
       case MessageType.system:
         return body;
       case MessageType.text:
-      default:
         return body;
     }
   }
@@ -121,7 +145,6 @@ class Message {
       case MessageType.system:
         return body;
       case MessageType.text:
-      default:
         return body;
     }
   }

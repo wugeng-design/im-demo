@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../sdk/models/conversation.dart' as models;
@@ -113,6 +115,12 @@ class ImRepository {
 
   /// 保存消息
   Future<void> saveMessage(models.Message message) async {
+    // 构建 extra JSON（包含 replyTo 等扩展信息）
+    String? extra;
+    if (message.replyTo != null) {
+      extra = jsonEncode({'replyTo': message.replyTo!.toJson()});
+    }
+
     await _db.insertMessage(MessagesCompanion(
       id: Value(message.id),
       conversationId: Value(message.conversationId),
@@ -123,6 +131,7 @@ class ImRepository {
       isMe: Value(message.isMe),
       status: Value(message.status ?? 'sent'),
       type: Value(message.messageType.name),
+      extra: Value(extra),
       createdAt: Value(DateTime.now()),
     ));
   }
@@ -212,6 +221,32 @@ class ImRepository {
   }
 
   models.Message _toModelMessage(Message db) {
+    // 解析 extra JSON 数据
+    models.ReplyInfo? replyTo;
+    bool isEdited = false;
+
+    if (db.extra != null && db.extra!.isNotEmpty) {
+      // 兼容旧格式：直接是 'edited' 字符串
+      if (db.extra == 'edited') {
+        isEdited = true;
+      } else {
+        // 新格式：JSON 对象
+        try {
+          final extraData = jsonDecode(db.extra!) as Map<String, dynamic>;
+          if (extraData['replyTo'] != null) {
+            replyTo = models.ReplyInfo.fromJson(
+              extraData['replyTo'] as Map<String, dynamic>,
+            );
+          }
+          if (extraData['edited'] == true) {
+            isEdited = true;
+          }
+        } catch (_) {
+          // 解析失败，忽略
+        }
+      }
+    }
+
     return models.Message(
       id: db.id,
       conversationId: db.conversationId,
@@ -225,7 +260,8 @@ class ImRepository {
         (t) => t.name == db.type,
         orElse: () => models.MessageType.text,
       ),
-      isEdited: db.extra == 'edited',
+      isEdited: isEdited,
+      replyTo: replyTo,
     );
   }
 

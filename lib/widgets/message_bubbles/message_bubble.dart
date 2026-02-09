@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../sdk/models/message.dart';
 import '../../theme/im_design_tokens.dart';
 import '../../theme/message_styles.dart';
 import '../im_avatar.dart';
+import 'quote_bubble.dart';
 
 /// 消息状态
 enum MessageDisplayStatus {
@@ -27,10 +29,12 @@ class MessageBubble extends StatelessWidget {
     this.showSenderName = false,
     this.showAvatar = false,
     this.isEdited = false,
+    this.replyTo,
     this.onLongPress,
     this.onTap,
     this.onRetry,
     this.onAvatarTap,
+    this.onQuoteTap,
   });
 
   /// 消息内容
@@ -63,6 +67,9 @@ class MessageBubble extends StatelessWidget {
   /// 是否已编辑
   final bool isEdited;
 
+  /// 回复消息信息
+  final ReplyInfo? replyTo;
+
   /// 长按回调
   final VoidCallback? onLongPress;
 
@@ -74,6 +81,9 @@ class MessageBubble extends StatelessWidget {
 
   /// 头像点击回调
   final VoidCallback? onAvatarTap;
+
+  /// 引用消息点击回调
+  final VoidCallback? onQuoteTap;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +150,13 @@ class MessageBubble extends StatelessWidget {
                           senderName!,
                           style: MessageStyles.senderName(colors.primary),
                         ),
+                      ),
+                    // 引用消息气泡
+                    if (replyTo != null)
+                      QuoteBubble(
+                        replyInfo: replyTo!,
+                        isSentByMe: isSentByMe,
+                        onTap: onQuoteTap,
                       ),
                     // 消息内容
                     Text(

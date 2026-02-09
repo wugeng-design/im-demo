@@ -16,6 +16,7 @@ class LoginPage extends ConsumerStatefulWidget {
 /// 注意: useTls 参数表示 DirectTLS，现代服务器使用 STARTTLS (useTls=false)
 enum ServerPreset {
   localhost('本地服务器', 'localhost', 5222, 'localhost', false),
+  // 腾讯云使用明文连接（服务器已禁用 STARTTLS 广播）
   tencentCloud('腾讯云服务器', '43.143.160.115', 5222, 'localhost', false),
   // 公共服务器使用 STARTTLS (useTls=false)，不是 DirectTLS
   conversationsIm('conversations.im', 'conversations.im', 5222, 'conversations.im', false),

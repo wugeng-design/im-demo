@@ -70,9 +70,9 @@ class EditedMessageBubble extends StatelessWidget {
               text,
               style: MessageStyles.bodyText(textColor),
             ),
-            const SizedBox(height: 4),
-            // 时间和状态
-            _buildTimeAndStatus(colors),
+            // 时间和状态（微信风格：不显示）
+            // const SizedBox(height: 4),
+            // _buildTimeAndStatus(colors),
           ],
         ),
       ),

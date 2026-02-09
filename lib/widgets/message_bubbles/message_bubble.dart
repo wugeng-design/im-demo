@@ -164,9 +164,9 @@ class MessageBubble extends StatelessWidget {
                         fontSize: 15,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    // 时间和状态
-                    _buildFooter(colors),
+                    // 时间和状态（微信风格：不显示）
+                    // const SizedBox(height: 4),
+                    // _buildFooter(colors),
                   ],
                 ),
               ),

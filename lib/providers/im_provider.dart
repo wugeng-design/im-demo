@@ -10,8 +10,10 @@ import '../sdk/models/contact.dart';
 import '../sdk/models/media.dart';
 import '../sdk/services/impl/standalone_connection_service.dart';
 import '../sdk/services/impl/xep0363_upload_service.dart';
+import '../sdk/services/impl/avatar_upload_service_impl.dart';
 import '../sdk/services/im_connection_service.dart';
 import '../sdk/services/media_upload_service.dart';
+import '../sdk/services/avatar_upload_service.dart';
 import '../sdk/services/reconnect_manager.dart';
 import '../sdk/services/typing_indicator_service.dart';
 
@@ -54,6 +56,61 @@ final mediaUploadServiceProvider = Provider<MediaUploadService>((ref) {
   final service = Xep0363UploadService(domain: domain, whixp: whixp);
   ref.onDispose(() => service.dispose());
   return service;
+});
+
+/// 头像上传服务 Provider
+///
+/// 提供个人头像和群头像上传功能
+/// 使用 XEP-0363 上传图片，然后将 URL 存储到 vCard
+final avatarUploadServiceProvider = Provider<AvatarUploadService?>((ref) {
+  final connectionService = ref.watch(imConnectionServiceProvider);
+  final uploadService = ref.watch(mediaUploadServiceProvider);
+
+  // 需要连接和上传服务
+  if (connectionService.ejabberdApi == null ||
+      uploadService is _PlaceholderUploadService) {
+    return null;
+  }
+
+  final jid = connectionService.currentJid;
+  if (jid == null) return null;
+
+  final user = jid.split('@').first;
+  final domain = connectionService.savedConfig?.domain ?? 'localhost';
+
+  return AvatarUploadServiceImpl(
+    uploadService: uploadService as Xep0363UploadService,
+    apiClient: connectionService.ejabberdApi!,
+    currentUser: user,
+    domain: domain,
+  );
+});
+
+/// 当前用户头像 URL Provider
+///
+/// 从 vCard 获取当前用户的头像 URL
+final userAvatarProvider = FutureProvider<String?>((ref) async {
+  final avatarService = ref.watch(avatarUploadServiceProvider);
+  if (avatarService == null) return null;
+  return avatarService.getUserAvatarUrl();
+});
+
+/// 指定用户头像 URL Provider
+///
+/// [userJid] 用户 JID
+final userAvatarByJidProvider = FutureProvider.family<String?, String>((ref, userJid) async {
+  final avatarService = ref.watch(avatarUploadServiceProvider);
+  if (avatarService == null) return null;
+  return avatarService.getUserAvatarUrlByJid(userJid);
+});
+
+/// 群头像 URL Provider
+///
+/// [groupJid] 群 JID
+final groupAvatarProvider = FutureProvider.family<String?, String>((ref, groupJid) async {
+  final avatarService = ref.watch(avatarUploadServiceProvider);
+  if (avatarService == null) return null;
+  return avatarService.getGroupAvatarUrl(groupJid);
 });
 
 /// 连接状态 Provider

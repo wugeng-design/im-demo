@@ -74,6 +74,19 @@ class ImRepository {
     ));
   }
 
+  /// 更新会话名称（群名称修改后调用）
+  Future<void> updateConversationName(
+    String conversationId,
+    String newName,
+  ) async {
+    await (_db.update(_db.conversations)
+          ..where((t) => t.id.equals(conversationId)))
+        .write(ConversationsCompanion(
+      name: Value(newName),
+      updatedAt: Value(DateTime.now()),
+    ));
+  }
+
   /// 更新会话的最后消息
   Future<void> updateConversationLastMessage(
     String conversationId,

@@ -218,6 +218,9 @@ class StandaloneConnectionService implements ImConnectionService {
   /// 获取 Whixp 实例（用于 XEP-0363 文件上传等）
   Whixp? get whixp => _whixp;
 
+  /// 获取 ejabberd REST API 客户端（用于头像上传等）
+  EjabberdApiClient? get ejabberdApi => _ejabberdApi;
+
   @override
   bool get isConnected => _currentState == ImConnectionState.authenticated;
 

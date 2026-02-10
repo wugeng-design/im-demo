@@ -267,6 +267,67 @@ class EjabberdApiClient {
     }
   }
 
+  /// 设置用户的 vCard 字段
+  ///
+  /// 使用 ejabberd REST API 的 set_vcard2 命令
+  ///
+  /// [user] 用户名（不含域名）
+  /// [host] 域名
+  /// [name] vCard 字段名，支持以下字段：
+  ///   - NICKNAME: 昵称
+  ///   - FN: 全名
+  ///   - PHOTO EXTVAL: 头像 URL（外部链接）
+  ///   - PHOTO TYPE: 头像 MIME 类型
+  /// [content] 字段值
+  Future<void> setVcard2(
+    String user,
+    String host,
+    String name,
+    String content,
+  ) async {
+    await _request('set_vcard2', {
+      'user': user,
+      'host': host,
+      'name': name,
+      'content': content,
+    });
+  }
+
+  /// 便捷方法：设置用户头像 URL
+  ///
+  /// 将头像 URL 存储到 vCard 的 PHOTO EXTVAL 字段
+  Future<void> setUserAvatarUrl(
+    String user,
+    String host,
+    String avatarUrl,
+  ) async {
+    // 设置头像 URL
+    await setVcard2(user, host, 'PHOTO EXTVAL', avatarUrl);
+    // 设置头像类型
+    final mimeType = _getMimeTypeFromUrl(avatarUrl);
+    await setVcard2(user, host, 'PHOTO TYPE', mimeType);
+  }
+
+  /// 从 URL 推断 MIME 类型
+  String _getMimeTypeFromUrl(String url) {
+    final lowerUrl = url.toLowerCase();
+    if (lowerUrl.endsWith('.png')) return 'image/png';
+    if (lowerUrl.endsWith('.gif')) return 'image/gif';
+    if (lowerUrl.endsWith('.webp')) return 'image/webp';
+    return 'image/jpeg'; // 默认 JPEG
+  }
+
+  /// 设置群聊头像
+  ///
+  /// 通过 room option 存储群头像 URL
+  Future<void> setRoomAvatar(
+    String room,
+    String service,
+    String avatarUrl,
+  ) async {
+    await changeRoomOption(room, service, 'vcard_photo', avatarUrl);
+  }
+
   /// 获取所有注册用户
   ///
   /// 返回用户名列表（不包含域名）
@@ -351,5 +412,10 @@ class EjabberdApiException implements Exception {
   EjabberdApiException(this.message, this.statusCode, this.body);
 
   @override
-  String toString() => 'EjabberdApiException: $message (status: $statusCode)';
+  String toString() {
+    if (body != null && body!.isNotEmpty) {
+      return 'EjabberdApiException: $message (status: $statusCode, body: $body)';
+    }
+    return 'EjabberdApiException: $message (status: $statusCode)';
+  }
 }

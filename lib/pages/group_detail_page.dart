@@ -1,11 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../providers/im_provider.dart';
 import '../sdk/models/contact.dart';
 import '../sdk/models/conversation.dart';
 import '../sdk/services/impl/standalone_connection_service.dart';
 import '../theme/im_design_tokens.dart';
+import '../widgets/group_avatar.dart';
 import '../widgets/im_avatar.dart';
 
 /// 群聊详情页面
@@ -327,10 +331,43 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
 
   /// 构建设置区域
   Widget _buildSettingsSection(ImColorScheme colors) {
+    final groupAvatarAsync = ref.watch(groupAvatarProvider(widget.groupId));
+    final groupAvatarUrl = groupAvatarAsync.valueOrNull;
+
     return Container(
       color: colors.surface,
       child: Column(
         children: [
+          // 群头像（仅管理员可编辑）
+          _buildSettingsTile(
+            title: '群头像',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 显示当前群头像
+                if (groupAvatarUrl != null && groupAvatarUrl.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.network(
+                      groupAvatarUrl,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _buildDefaultGroupAvatar(),
+                    ),
+                  )
+                else
+                  _buildDefaultGroupAvatar(),
+                if (_isAdmin) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.chevron_right, color: colors.textTertiary),
+                ],
+              ],
+            ),
+            onTap: _isAdmin ? () => _showGroupAvatarOptions(colors) : null,
+            colors: colors,
+          ),
+          _buildDivider(colors),
           // 群名称
           _buildSettingsTile(
             title: '群聊名称',
@@ -629,6 +666,125 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
     }
   }
 
+  /// 构建默认群头像（九宫格）
+  Widget _buildDefaultGroupAvatar() {
+    return GroupAvatar(
+      members: _members.take(9).map((m) => GroupMemberAvatar(
+        memberId: m.jid,
+        name: m.name,
+      )).toList(),
+      size: 40,
+    );
+  }
+
+  /// 显示群头像选择选项
+  void _showGroupAvatarOptions(ImColorScheme colors) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '修改群头像',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.photo_library, color: Colors.blue[700]),
+              ),
+              title: const Text('从相册选择'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadGroupAvatar(ImageSource.gallery);
+              },
+            ),
+            ListTile(
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.camera_alt, color: Colors.green[700]),
+              ),
+              title: const Text('拍照'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickAndUploadGroupAvatar(ImageSource.camera);
+              },
+            ),
+            const SizedBox(height: 8),
+            Divider(color: Colors.grey[200]),
+            ListTile(
+              leading: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.close, color: Colors.grey[600]),
+              ),
+              title: const Text('取消'),
+              onTap: () => Navigator.pop(context),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 选择并上传群头像
+  Future<void> _pickAndUploadGroupAvatar(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: source,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 90,
+    );
+
+    if (pickedFile == null) return;
+
+    if (!mounted) return;
+
+    // 显示上传对话框
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _GroupAvatarUploadDialog(
+        imageFile: File(pickedFile.path),
+        groupJid: widget.groupId,
+      ),
+    );
+  }
+
   void _editGroupName() {
     final controller = TextEditingController(text: widget.groupName);
 
@@ -659,6 +815,11 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
               if (connectionService is StandaloneConnectionService) {
                 try {
                   await connectionService.setRoomName(widget.groupId, newName);
+                  // 更新本地会话名称
+                  final repository = ref.read(repositoryProvider);
+                  await repository.updateConversationName(widget.groupId, newName);
+                  // 刷新会话列表
+                  ref.invalidate(conversationsProvider);
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('群名称已修改')),
@@ -1090,6 +1251,130 @@ class _RemoveMemberPageState extends State<_RemoveMemberPage> {
                 );
               },
             ),
+    );
+  }
+}
+
+// ========== 群头像上传对话框 ==========
+
+class _GroupAvatarUploadDialog extends ConsumerStatefulWidget {
+  final File imageFile;
+  final String groupJid;
+
+  const _GroupAvatarUploadDialog({
+    required this.imageFile,
+    required this.groupJid,
+  });
+
+  @override
+  ConsumerState<_GroupAvatarUploadDialog> createState() =>
+      _GroupAvatarUploadDialogState();
+}
+
+class _GroupAvatarUploadDialogState
+    extends ConsumerState<_GroupAvatarUploadDialog> {
+  double _progress = 0;
+  String? _error;
+  bool _isCompleted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _uploadAvatar();
+  }
+
+  Future<void> _uploadAvatar() async {
+    final service = ref.read(avatarUploadServiceProvider);
+
+    if (service == null) {
+      if (mounted) {
+        setState(() => _error = '上传服务未就绪');
+      }
+      return;
+    }
+
+    final result = await service.uploadGroupAvatar(
+      groupJid: widget.groupJid,
+      imageFile: widget.imageFile,
+      onProgress: (p) {
+        if (mounted) {
+          setState(() => _progress = p);
+        }
+      },
+    );
+
+    if (!mounted) return;
+
+    if (result.success) {
+      setState(() => _isCompleted = true);
+      // 刷新群头像缓存
+      ref.invalidate(groupAvatarProvider(widget.groupJid));
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (mounted) Navigator.pop(context);
+    } else {
+      setState(() => _error = result.error ?? '上传失败');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      content: SizedBox(
+        width: 200,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            if (_error != null) ...[
+              Icon(Icons.error_outline, color: Colors.red[400], size: 48),
+              const SizedBox(height: 16),
+              Text(
+                _error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.red[700]),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('关闭'),
+              ),
+            ] else if (_isCompleted) ...[
+              Icon(Icons.check_circle, color: Colors.green[400], size: 48),
+              const SizedBox(height: 16),
+              const Text(
+                '群头像更新成功',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+            ] else ...[
+              SizedBox(
+                width: 60,
+                height: 60,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      value: _progress > 0 ? _progress : null,
+                      strokeWidth: 3,
+                    ),
+                    if (_progress > 0)
+                      Text(
+                        '${(_progress * 100).toInt()}%',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('正在上传群头像...'),
+            ],
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
   }
 }

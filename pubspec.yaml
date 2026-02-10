@@ -1,5 +1,5 @@
 name: im_sdk_demo
-description: "A new Flutter project."
+description: "畅聊天下 - 互联互动"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -77,6 +77,9 @@ dependencies:
   # 音频播放
   just_audio: ^0.9.40
 
+  # 分享
+  share_plus: ^10.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -91,6 +94,17 @@ dev_dependencies:
   # Drift 代码生成
   drift_dev: ^2.22.1
   build_runner: ^2.4.14
+
+  # 应用图标生成
+  flutter_launcher_icons: ^0.14.3
+
+# 应用图标配置
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#2196F3"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

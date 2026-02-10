@@ -344,6 +344,235 @@ class EjabberdApiClient {
       return [];
     }
   }
+
+  // ============================================================================
+  // 用户注册和密码管理 API
+  // ============================================================================
+
+  /// 注册新用户
+  ///
+  /// [user] 用户名（不含域名）
+  /// [host] 域名
+  /// [password] 密码
+  Future<void> register(String user, String host, String password) async {
+    await _request('register', {
+      'user': user,
+      'host': host,
+      'password': password,
+    });
+  }
+
+  /// 注销用户
+  ///
+  /// [user] 用户名（不含域名）
+  /// [host] 域名
+  Future<void> unregister(String user, String host) async {
+    await _request('unregister', {
+      'user': user,
+      'host': host,
+    });
+  }
+
+  /// 修改用户密码
+  ///
+  /// [user] 用户名（不含域名）
+  /// [host] 域名
+  /// [newPassword] 新密码
+  Future<void> changePassword(String user, String host, String newPassword) async {
+    await _request('change_password', {
+      'user': user,
+      'host': host,
+      'newpass': newPassword,
+    });
+  }
+
+  // ============================================================================
+  // 好友/花名册管理 API
+  // ============================================================================
+
+  /// 获取用户的好友列表
+  ///
+  /// 返回好友 JID 列表
+  Future<List<RosterItem>> getRoster(String user, String host) async {
+    try {
+      final result = await _request('get_roster', {
+        'user': user,
+        'host': host,
+      });
+
+      if (result == null || result is! List) return [];
+      return result.map((item) => RosterItem.fromJson(item as Map<String, dynamic>)).toList();
+    } catch (e) {
+      print('[EjabberdAPI] 获取好友列表失败: $e');
+      return [];
+    }
+  }
+
+  /// 添加好友
+  ///
+  /// [localUser] 本地用户名
+  /// [localHost] 本地域名
+  /// [contactJid] 好友 JID
+  /// [nick] 好友昵称
+  /// [groups] 分组列表
+  /// [subscription] 订阅类型 (none, from, to, both)
+  Future<void> addRosterItem(
+    String localUser,
+    String localHost,
+    String contactJid,
+    String nick, {
+    List<String>? groups,
+    String subscription = 'both',
+  }) async {
+    await _request('add_rosteritem', {
+      'localuser': localUser,
+      'localhost': localHost,
+      'user': contactJid.split('@').first,
+      'host': contactJid.contains('@') ? contactJid.split('@').last : localHost,
+      'nick': nick,
+      'group': groups?.join(',') ?? '',
+      'subs': subscription,
+    });
+  }
+
+  /// 删除好友
+  ///
+  /// [localUser] 本地用户名
+  /// [localHost] 本地域名
+  /// [contactJid] 好友 JID
+  Future<void> deleteRosterItem(
+    String localUser,
+    String localHost,
+    String contactJid,
+  ) async {
+    await _request('delete_rosteritem', {
+      'localuser': localUser,
+      'localhost': localHost,
+      'user': contactJid.split('@').first,
+      'host': contactJid.contains('@') ? contactJid.split('@').last : localHost,
+    });
+  }
+
+  // ============================================================================
+  // 用户群聊查询 API
+  // ============================================================================
+
+  /// 获取用户加入的所有群聊
+  ///
+  /// 返回群聊 JID 列表
+  Future<List<String>> getUserRooms(String user, String host) async {
+    try {
+      final result = await _request('get_user_rooms', {
+        'user': user,
+        'host': host,
+      });
+
+      if (result == null || result is! List) return [];
+      return List<String>.from(result);
+    } catch (e) {
+      print('[EjabberdAPI] 获取用户群聊列表失败: $e');
+      return [];
+    }
+  }
+
+  // ============================================================================
+  // 消息和状态 API
+  // ============================================================================
+
+  /// 获取用户离线消息数量
+  Future<int> getOfflineCount(String user, String host) async {
+    try {
+      final result = await _request('get_offline_count', {
+        'user': user,
+        'host': host,
+      });
+      return result is int ? result : 0;
+    } catch (e) {
+      print('[EjabberdAPI] 获取离线消息数量失败: $e');
+      return 0;
+    }
+  }
+
+  /// 获取用户最后活动时间
+  ///
+  /// 返回: {status: "状态", timestamp: 时间戳}
+  Future<Map<String, dynamic>?> getLastActivity(String user, String host) async {
+    try {
+      final result = await _request('get_last', {
+        'user': user,
+        'host': host,
+      });
+      return result as Map<String, dynamic>?;
+    } catch (e) {
+      print('[EjabberdAPI] 获取最后活动时间失败: $e');
+      return null;
+    }
+  }
+
+  /// 从服务端发送消息
+  ///
+  /// [type] 消息类型: chat, headline, groupchat
+  /// [from] 发送者 JID
+  /// [to] 接收者 JID
+  /// [subject] 主题（可选）
+  /// [body] 消息内容
+  Future<void> sendMessage({
+    required String type,
+    required String from,
+    required String to,
+    String? subject,
+    required String body,
+  }) async {
+    await _request('send_message', {
+      'type': type,
+      'from': from,
+      'to': to,
+      'subject': subject ?? '',
+      'body': body,
+    });
+  }
+
+  /// 发送系统通知给所有用户
+  ///
+  /// [host] 域名
+  /// [subject] 主题
+  /// [body] 内容
+  Future<void> sendBroadcastMessage(String host, String subject, String body) async {
+    await _request('send_stanza_c2s', {
+      'host': host,
+      'stanza': '<message type="headline"><subject>$subject</subject><body>$body</body></message>',
+    });
+  }
+
+  // ============================================================================
+  // 服务器状态 API
+  // ============================================================================
+
+  /// 获取在线用户数
+  Future<int> getConnectedUsersNumber() async {
+    try {
+      final result = await _request('connected_users_number', {});
+      return result is int ? result : 0;
+    } catch (e) {
+      print('[EjabberdAPI] 获取在线用户数失败: $e');
+      return 0;
+    }
+  }
+
+  /// 获取服务器统计信息
+  ///
+  /// [name] 统计项名称: registeredusers, onlineusers, onlineusersnode, uptimeseconds
+  Future<int> getStats(String name) async {
+    try {
+      final result = await _request('stats', {
+        'name': name,
+      });
+      return result is int ? result : 0;
+    } catch (e) {
+      print('[EjabberdAPI] 获取统计信息失败: $e');
+      return 0;
+    }
+  }
 }
 
 /// MUC 在线成员信息
@@ -401,6 +630,35 @@ class MucAffiliation {
   bool get isAdmin => affiliation == 'admin';
   bool get isMember => affiliation == 'member';
   bool get isOutcast => affiliation == 'outcast';
+}
+
+/// 好友/花名册项
+class RosterItem {
+  final String jid;
+  final String? nick;
+  final String subscription;
+  final List<String> groups;
+
+  RosterItem({
+    required this.jid,
+    this.nick,
+    required this.subscription,
+    this.groups = const [],
+  });
+
+  factory RosterItem.fromJson(Map<String, dynamic> json) {
+    return RosterItem(
+      jid: json['jid'] ?? '',
+      nick: json['nick'],
+      subscription: json['subscription'] ?? 'none',
+      groups: json['group'] is List
+          ? List<String>.from(json['group'])
+          : (json['group'] as String?)?.split(',').where((g) => g.isNotEmpty).toList() ?? [],
+    );
+  }
+
+  bool get isFriend => subscription == 'both';
+  bool get isPending => subscription == 'none' || subscription == 'from';
 }
 
 /// ejabberd API 异常

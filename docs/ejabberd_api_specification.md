@@ -553,6 +553,383 @@ POST /api/muc_online_rooms
 
 ---
 
+### 3. 用户注册和密码管理
+
+#### 3.1 注册新用户
+
+**请求**
+```
+POST /api/register
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 用户名（不含域名） |
+| host | string | 是 | 域名 |
+| password | string | 是 | 密码 |
+
+**请求示例**
+```json
+{
+  "user": "newuser",
+  "host": "localhost",
+  "password": "secret123"
+}
+```
+
+**响应**
+- 成功: 空响应或 `0`
+
+---
+
+#### 3.2 注销用户
+
+**请求**
+```
+POST /api/unregister
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 用户名 |
+| host | string | 是 | 域名 |
+
+**请求示例**
+```json
+{
+  "user": "olduser",
+  "host": "localhost"
+}
+```
+
+**响应**
+- 成功: 空响应或 `0`
+
+---
+
+#### 3.3 修改密码
+
+**请求**
+```
+POST /api/change_password
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 用户名 |
+| host | string | 是 | 域名 |
+| newpass | string | 是 | 新密码 |
+
+**请求示例**
+```json
+{
+  "user": "alice",
+  "host": "localhost",
+  "newpass": "newpassword123"
+}
+```
+
+**响应**
+- 成功: 空响应或 `0`
+
+---
+
+### 4. 好友/花名册管理
+
+#### 4.1 获取好友列表
+
+**请求**
+```
+POST /api/get_roster
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 用户名 |
+| host | string | 是 | 域名 |
+
+**请求示例**
+```json
+{
+  "user": "alice",
+  "host": "localhost"
+}
+```
+
+**响应示例**
+```json
+[
+  {
+    "jid": "bob@localhost",
+    "nick": "Bob",
+    "subscription": "both",
+    "group": ["friends", "work"]
+  },
+  {
+    "jid": "charlie@localhost",
+    "nick": "Charlie",
+    "subscription": "both",
+    "group": ["friends"]
+  }
+]
+```
+
+**subscription 字段说明**
+| 值 | 说明 |
+|----|------|
+| none | 无订阅关系 |
+| from | 对方订阅了我 |
+| to | 我订阅了对方 |
+| both | 互相订阅（好友） |
+
+---
+
+#### 4.2 添加好友
+
+**请求**
+```
+POST /api/add_rosteritem
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| localuser | string | 是 | 本地用户名 |
+| localhost | string | 是 | 本地域名 |
+| user | string | 是 | 好友用户名 |
+| host | string | 是 | 好友域名 |
+| nick | string | 是 | 好友昵称 |
+| group | string | 否 | 分组（逗号分隔） |
+| subs | string | 是 | 订阅类型 |
+
+**请求示例**
+```json
+{
+  "localuser": "alice",
+  "localhost": "localhost",
+  "user": "bob",
+  "host": "localhost",
+  "nick": "Bob",
+  "group": "friends",
+  "subs": "both"
+}
+```
+
+**响应**
+- 成功: 空响应或 `0`
+
+---
+
+#### 4.3 删除好友
+
+**请求**
+```
+POST /api/delete_rosteritem
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| localuser | string | 是 | 本地用户名 |
+| localhost | string | 是 | 本地域名 |
+| user | string | 是 | 好友用户名 |
+| host | string | 是 | 好友域名 |
+
+**请求示例**
+```json
+{
+  "localuser": "alice",
+  "localhost": "localhost",
+  "user": "bob",
+  "host": "localhost"
+}
+```
+
+**响应**
+- 成功: 空响应或 `0`
+
+---
+
+### 5. 用户群聊查询
+
+#### 5.1 获取用户加入的群聊列表
+
+**请求**
+```
+POST /api/get_user_rooms
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 用户名 |
+| host | string | 是 | 域名 |
+
+**请求示例**
+```json
+{
+  "user": "alice",
+  "host": "localhost"
+}
+```
+
+**响应示例**
+```json
+["room1@conference.localhost", "room2@conference.localhost"]
+```
+
+---
+
+### 6. 消息和状态
+
+#### 6.1 获取离线消息数量
+
+**请求**
+```
+POST /api/get_offline_count
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 用户名 |
+| host | string | 是 | 域名 |
+
+**请求示例**
+```json
+{
+  "user": "alice",
+  "host": "localhost"
+}
+```
+
+**响应示例**
+```json
+5
+```
+
+---
+
+#### 6.2 获取用户最后活动时间
+
+**请求**
+```
+POST /api/get_last
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 用户名 |
+| host | string | 是 | 域名 |
+
+**请求示例**
+```json
+{
+  "user": "alice",
+  "host": "localhost"
+}
+```
+
+**响应示例**
+```json
+{
+  "status": "away",
+  "timestamp": 1707123456
+}
+```
+
+---
+
+#### 6.3 服务端发送消息
+
+**请求**
+```
+POST /api/send_message
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| type | string | 是 | 消息类型（chat/headline/groupchat） |
+| from | string | 是 | 发送者 JID |
+| to | string | 是 | 接收者 JID |
+| subject | string | 否 | 主题 |
+| body | string | 是 | 消息内容 |
+
+**请求示例**
+```json
+{
+  "type": "chat",
+  "from": "admin@localhost",
+  "to": "alice@localhost",
+  "subject": "",
+  "body": "系统通知：您的账户已激活"
+}
+```
+
+**响应**
+- 成功: 空响应或 `0`
+
+---
+
+### 7. 服务器状态
+
+#### 7.1 获取在线用户数
+
+**请求**
+```
+POST /api/connected_users_number
+```
+
+**参数**
+无
+
+**响应示例**
+```json
+42
+```
+
+---
+
+#### 7.2 获取服务器统计信息
+
+**请求**
+```
+POST /api/stats
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| name | string | 是 | 统计项名称 |
+
+**可用的统计项**
+| 名称 | 说明 |
+|------|------|
+| registeredusers | 注册用户总数 |
+| onlineusers | 在线用户数 |
+| onlineusersnode | 本节点在线用户数 |
+| uptimeseconds | 服务器运行时间（秒） |
+
+**请求示例**
+```json
+{
+  "name": "registeredusers"
+}
+```
+
+**响应示例**
+```json
+1000
+```
+
+---
+
 ## 错误处理
 
 ### HTTP 状态码
@@ -616,3 +993,4 @@ modules:
 |------|------|------|
 | 1.0.0 | 2024-02 | 初始版本，包含用户管理和 MUC 群聊管理 API |
 | 1.1.0 | 2024-02 | 添加 vCard 头像上传支持 |
+| 1.2.0 | 2024-02 | 添加用户注册、好友管理、消息和服务器状态 API |

@@ -92,6 +92,21 @@ class $ConversationsTable extends Conversations
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _isMutedMeta = const VerificationMeta(
+    'isMuted',
+  );
+  @override
+  late final GeneratedColumn<bool> isMuted = GeneratedColumn<bool>(
+    'is_muted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_muted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _avatarMeta = const VerificationMeta('avatar');
   @override
   late final GeneratedColumn<String> avatar = GeneratedColumn<String>(
@@ -154,6 +169,7 @@ class $ConversationsTable extends Conversations
     unreadCount,
     isGroup,
     isPinned,
+    isMuted,
     avatar,
     draft,
     membersJson,
@@ -222,6 +238,12 @@ class $ConversationsTable extends Conversations
       context.handle(
         _isPinnedMeta,
         isPinned.isAcceptableOrUnknown(data['is_pinned']!, _isPinnedMeta),
+      );
+    }
+    if (data.containsKey('is_muted')) {
+      context.handle(
+        _isMutedMeta,
+        isMuted.isAcceptableOrUnknown(data['is_muted']!, _isMutedMeta),
       );
     }
     if (data.containsKey('avatar')) {
@@ -294,6 +316,10 @@ class $ConversationsTable extends Conversations
         DriftSqlType.bool,
         data['${effectivePrefix}is_pinned'],
       )!,
+      isMuted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_muted'],
+      )!,
       avatar: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}avatar'],
@@ -331,6 +357,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final int unreadCount;
   final bool isGroup;
   final bool isPinned;
+  final bool isMuted;
   final String? avatar;
   final String? draft;
   final String? membersJson;
@@ -344,6 +371,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     required this.unreadCount,
     required this.isGroup,
     required this.isPinned,
+    required this.isMuted,
     this.avatar,
     this.draft,
     this.membersJson,
@@ -364,6 +392,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     map['unread_count'] = Variable<int>(unreadCount);
     map['is_group'] = Variable<bool>(isGroup);
     map['is_pinned'] = Variable<bool>(isPinned);
+    map['is_muted'] = Variable<bool>(isMuted);
     if (!nullToAbsent || avatar != null) {
       map['avatar'] = Variable<String>(avatar);
     }
@@ -391,6 +420,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       unreadCount: Value(unreadCount),
       isGroup: Value(isGroup),
       isPinned: Value(isPinned),
+      isMuted: Value(isMuted),
       avatar: avatar == null && nullToAbsent
           ? const Value.absent()
           : Value(avatar),
@@ -418,6 +448,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       unreadCount: serializer.fromJson<int>(json['unreadCount']),
       isGroup: serializer.fromJson<bool>(json['isGroup']),
       isPinned: serializer.fromJson<bool>(json['isPinned']),
+      isMuted: serializer.fromJson<bool>(json['isMuted']),
       avatar: serializer.fromJson<String?>(json['avatar']),
       draft: serializer.fromJson<String?>(json['draft']),
       membersJson: serializer.fromJson<String?>(json['membersJson']),
@@ -436,6 +467,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       'unreadCount': serializer.toJson<int>(unreadCount),
       'isGroup': serializer.toJson<bool>(isGroup),
       'isPinned': serializer.toJson<bool>(isPinned),
+      'isMuted': serializer.toJson<bool>(isMuted),
       'avatar': serializer.toJson<String?>(avatar),
       'draft': serializer.toJson<String?>(draft),
       'membersJson': serializer.toJson<String?>(membersJson),
@@ -452,6 +484,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     int? unreadCount,
     bool? isGroup,
     bool? isPinned,
+    bool? isMuted,
     Value<String?> avatar = const Value.absent(),
     Value<String?> draft = const Value.absent(),
     Value<String?> membersJson = const Value.absent(),
@@ -467,6 +500,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     unreadCount: unreadCount ?? this.unreadCount,
     isGroup: isGroup ?? this.isGroup,
     isPinned: isPinned ?? this.isPinned,
+    isMuted: isMuted ?? this.isMuted,
     avatar: avatar.present ? avatar.value : this.avatar,
     draft: draft.present ? draft.value : this.draft,
     membersJson: membersJson.present ? membersJson.value : this.membersJson,
@@ -488,6 +522,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           : this.unreadCount,
       isGroup: data.isGroup.present ? data.isGroup.value : this.isGroup,
       isPinned: data.isPinned.present ? data.isPinned.value : this.isPinned,
+      isMuted: data.isMuted.present ? data.isMuted.value : this.isMuted,
       avatar: data.avatar.present ? data.avatar.value : this.avatar,
       draft: data.draft.present ? data.draft.value : this.draft,
       membersJson: data.membersJson.present
@@ -508,6 +543,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('unreadCount: $unreadCount, ')
           ..write('isGroup: $isGroup, ')
           ..write('isPinned: $isPinned, ')
+          ..write('isMuted: $isMuted, ')
           ..write('avatar: $avatar, ')
           ..write('draft: $draft, ')
           ..write('membersJson: $membersJson, ')
@@ -526,6 +562,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     unreadCount,
     isGroup,
     isPinned,
+    isMuted,
     avatar,
     draft,
     membersJson,
@@ -543,6 +580,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           other.unreadCount == this.unreadCount &&
           other.isGroup == this.isGroup &&
           other.isPinned == this.isPinned &&
+          other.isMuted == this.isMuted &&
           other.avatar == this.avatar &&
           other.draft == this.draft &&
           other.membersJson == this.membersJson &&
@@ -558,6 +596,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<int> unreadCount;
   final Value<bool> isGroup;
   final Value<bool> isPinned;
+  final Value<bool> isMuted;
   final Value<String?> avatar;
   final Value<String?> draft;
   final Value<String?> membersJson;
@@ -572,6 +611,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.unreadCount = const Value.absent(),
     this.isGroup = const Value.absent(),
     this.isPinned = const Value.absent(),
+    this.isMuted = const Value.absent(),
     this.avatar = const Value.absent(),
     this.draft = const Value.absent(),
     this.membersJson = const Value.absent(),
@@ -587,6 +627,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.unreadCount = const Value.absent(),
     this.isGroup = const Value.absent(),
     this.isPinned = const Value.absent(),
+    this.isMuted = const Value.absent(),
     this.avatar = const Value.absent(),
     this.draft = const Value.absent(),
     this.membersJson = const Value.absent(),
@@ -603,6 +644,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<int>? unreadCount,
     Expression<bool>? isGroup,
     Expression<bool>? isPinned,
+    Expression<bool>? isMuted,
     Expression<String>? avatar,
     Expression<String>? draft,
     Expression<String>? membersJson,
@@ -618,6 +660,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       if (unreadCount != null) 'unread_count': unreadCount,
       if (isGroup != null) 'is_group': isGroup,
       if (isPinned != null) 'is_pinned': isPinned,
+      if (isMuted != null) 'is_muted': isMuted,
       if (avatar != null) 'avatar': avatar,
       if (draft != null) 'draft': draft,
       if (membersJson != null) 'members_json': membersJson,
@@ -635,6 +678,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Value<int>? unreadCount,
     Value<bool>? isGroup,
     Value<bool>? isPinned,
+    Value<bool>? isMuted,
     Value<String?>? avatar,
     Value<String?>? draft,
     Value<String?>? membersJson,
@@ -650,6 +694,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       unreadCount: unreadCount ?? this.unreadCount,
       isGroup: isGroup ?? this.isGroup,
       isPinned: isPinned ?? this.isPinned,
+      isMuted: isMuted ?? this.isMuted,
       avatar: avatar ?? this.avatar,
       draft: draft ?? this.draft,
       membersJson: membersJson ?? this.membersJson,
@@ -683,6 +728,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     if (isPinned.present) {
       map['is_pinned'] = Variable<bool>(isPinned.value);
     }
+    if (isMuted.present) {
+      map['is_muted'] = Variable<bool>(isMuted.value);
+    }
     if (avatar.present) {
       map['avatar'] = Variable<String>(avatar.value);
     }
@@ -714,6 +762,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('unreadCount: $unreadCount, ')
           ..write('isGroup: $isGroup, ')
           ..write('isPinned: $isPinned, ')
+          ..write('isMuted: $isMuted, ')
           ..write('avatar: $avatar, ')
           ..write('draft: $draft, ')
           ..write('membersJson: $membersJson, ')
@@ -1903,6 +1952,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       Value<int> unreadCount,
       Value<bool> isGroup,
       Value<bool> isPinned,
+      Value<bool> isMuted,
       Value<String?> avatar,
       Value<String?> draft,
       Value<String?> membersJson,
@@ -1919,6 +1969,7 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<int> unreadCount,
       Value<bool> isGroup,
       Value<bool> isPinned,
+      Value<bool> isMuted,
       Value<String?> avatar,
       Value<String?> draft,
       Value<String?> membersJson,
@@ -1999,6 +2050,11 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<bool> get isPinned => $composableBuilder(
     column: $table.isPinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isMuted => $composableBuilder(
+    column: $table.isMuted,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2097,6 +2153,11 @@ class $$ConversationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get isMuted => $composableBuilder(
+    column: $table.isMuted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get avatar => $composableBuilder(
     column: $table.avatar,
     builder: (column) => ColumnOrderings(column),
@@ -2158,6 +2219,9 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<bool> get isPinned =>
       $composableBuilder(column: $table.isPinned, builder: (column) => column);
+
+  GeneratedColumn<bool> get isMuted =>
+      $composableBuilder(column: $table.isMuted, builder: (column) => column);
 
   GeneratedColumn<String> get avatar =>
       $composableBuilder(column: $table.avatar, builder: (column) => column);
@@ -2237,6 +2301,7 @@ class $$ConversationsTableTableManager
                 Value<int> unreadCount = const Value.absent(),
                 Value<bool> isGroup = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
+                Value<bool> isMuted = const Value.absent(),
                 Value<String?> avatar = const Value.absent(),
                 Value<String?> draft = const Value.absent(),
                 Value<String?> membersJson = const Value.absent(),
@@ -2251,6 +2316,7 @@ class $$ConversationsTableTableManager
                 unreadCount: unreadCount,
                 isGroup: isGroup,
                 isPinned: isPinned,
+                isMuted: isMuted,
                 avatar: avatar,
                 draft: draft,
                 membersJson: membersJson,
@@ -2267,6 +2333,7 @@ class $$ConversationsTableTableManager
                 Value<int> unreadCount = const Value.absent(),
                 Value<bool> isGroup = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
+                Value<bool> isMuted = const Value.absent(),
                 Value<String?> avatar = const Value.absent(),
                 Value<String?> draft = const Value.absent(),
                 Value<String?> membersJson = const Value.absent(),
@@ -2281,6 +2348,7 @@ class $$ConversationsTableTableManager
                 unreadCount: unreadCount,
                 isGroup: isGroup,
                 isPinned: isPinned,
+                isMuted: isMuted,
                 avatar: avatar,
                 draft: draft,
                 membersJson: membersJson,

@@ -7,6 +7,17 @@ set -e
 
 cd "$(dirname "$0")/.."
 
+# 设置 JAVA_HOME（使用 Android Studio 自带的 JDK）
+if [ -z "$JAVA_HOME" ]; then
+    if [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
+        export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+        echo "Using JAVA_HOME: $JAVA_HOME"
+    elif [ -d "/Applications/Android Studio.app/Contents/jre/Contents/Home" ]; then
+        export JAVA_HOME="/Applications/Android Studio.app/Contents/jre/Contents/Home"
+        echo "Using JAVA_HOME: $JAVA_HOME"
+    fi
+fi
+
 PLATFORM="${1:-ios}"
 BUILD_MODE="${2:---release}"
 
@@ -43,10 +54,31 @@ case "$PLATFORM" in
         ;;
     apk)
         echo "Building Android APK..."
-        flutter build apk $BUILD_MODE
+        
+        EXTRA_ARGS=""
+        if [ "$BUILD_MODE" = "--release" ]; then
+            EXTRA_ARGS="$EXTRA_ARGS --obfuscate --split-debug-info=build/app/outputs/symbols"
+        fi
+        
+        flutter build apk $BUILD_MODE $EXTRA_ARGS
         echo ""
+        echo "=========================================="
         echo "APK build complete!"
-        echo "Output: build/app/outputs/flutter-apk/app-release.apk"
+        echo "=========================================="
+        echo ""
+        echo "输出文件位置:"
+        find build/app/outputs/flutter-apk -name "*.apk" -type f | while read file; do
+            SIZE=$(du -h "$file" | cut -f1)
+            echo "📦 $(basename $file)"
+            echo "   路径: $file"
+            echo "   大小: $SIZE"
+        done
+        echo ""
+        echo "安装到设备:"
+        echo "  flutter install"
+        echo ""
+        echo "或者使用 adb:"
+        echo "  adb install build/app/outputs/flutter-apk/app-$(echo $BUILD_MODE | sed 's/--//').apk"
         ;;
     *)
         echo "Usage: $0 [ios|macos|android|apk] [--release|--debug]"

@@ -49,6 +49,7 @@ class ImRepository {
       unreadCount: Value(conversation.unreadCount),
       isGroup: Value(conversation.isGroup),
       isPinned: Value(conversation.isPinned),
+      isMuted: Value(conversation.isMuted),
       avatar: Value(conversation.avatar),
       membersJson: Value(membersJson),
       updatedAt: Value(DateTime.now()),
@@ -110,6 +111,16 @@ class ImRepository {
   /// 切换置顶
   Future<void> togglePin(String conversationId) async {
     await _db.togglePin(conversationId);
+  }
+
+  /// 切换免打扰
+  Future<void> toggleMute(String conversationId) async {
+    await _db.toggleMute(conversationId);
+  }
+
+  /// 清空会话的所有消息
+  Future<void> clearMessages(String conversationId) async {
+    await _db.clearMessages(conversationId);
   }
 
   /// 删除会话
@@ -284,6 +295,7 @@ class ImRepository {
       unreadCount: db.unreadCount,
       isGroup: db.isGroup,
       isPinned: db.isPinned,
+      isMuted: db.isMuted,
       avatar: db.avatar,
       draft: db.draft,
       members: members,

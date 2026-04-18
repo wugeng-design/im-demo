@@ -406,6 +406,13 @@ class _ImageMessageBubbleState extends State<ImageMessageBubble> {
                   if (widget.status == MessageDisplayStatus.sending &&
                       widget.uploadProgress == null)
                     _buildSendingIndicator(colors),
+                  // 已发送/已读状态指示器（仅自己发送的消息）
+                  if (widget.isSentByMe &&
+                      widget.status != null &&
+                      widget.status != MessageDisplayStatus.failed &&
+                      widget.status != MessageDisplayStatus.sending &&
+                      widget.uploadProgress == null)
+                    _buildStatusIndicator(colors),
                 ],
               ),
             ),
@@ -700,6 +707,43 @@ class _ImageMessageBubbleState extends State<ImageMessageBubble> {
             strokeWidth: 2,
             color: Colors.white70,
           ),
+        ),
+      ),
+    );
+  }
+
+  /// 构建状态指示器（已发送/已送达/已读）
+  Widget _buildStatusIndicator(ImColorScheme colors) {
+    final IconData icon;
+    final Color color;
+
+    switch (widget.status!) {
+      case MessageDisplayStatus.sent:
+        icon = Icons.check;
+        color = Colors.white70;
+      case MessageDisplayStatus.delivered:
+        icon = Icons.done_all;
+        color = Colors.white70;
+      case MessageDisplayStatus.read:
+        icon = Icons.done_all;
+        color = colors.info; // 蓝色表示已读
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      right: 8,
+      bottom: 8,
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.black26,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Icon(
+          icon,
+          size: 14,
+          color: color,
         ),
       ),
     );

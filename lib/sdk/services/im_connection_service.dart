@@ -83,8 +83,47 @@ abstract class ImConnectionService {
   /// 离开群聊
   Future<void> leaveRoom(String roomJid, String nickname);
 
+  /// 获取群公告
+  Future<String?> getRoomAnnouncement(String roomJid);
+
+  /// 设置群公告
+  Future<void> setRoomAnnouncement(String roomJid, String announcement);
+
+  /// 获取群成员列表
+  Future<List<MucMember>> getRoomMembers(String roomJid);
+
+  /// 标记消息已读
+  ///
+  /// 向对方发送已读回执，标记该会话的消息为已读
+  Future<void> markAsRead(String peerJid);
+
   /// 释放资源
   void dispose();
+}
+
+/// MUC 群成员信息
+class MucMember {
+  /// 成员 JID（bare JID）
+  final String jid;
+
+  /// 群内昵称
+  final String? nickname;
+
+  /// 角色 (owner/admin/member/outcast/none)
+  final String affiliation;
+
+  /// 当前状态 (moderator/participant/visitor/none)
+  final String role;
+
+  MucMember({
+    required this.jid,
+    this.nickname,
+    this.affiliation = 'member',
+    this.role = 'participant',
+  });
+
+  bool get isOwner => affiliation == 'owner';
+  bool get isAdmin => affiliation == 'admin' || affiliation == 'owner';
 }
 
 /// SDK 消息模型（简化版）
@@ -205,6 +244,28 @@ class ImConnectionServicePlaceholder implements ImConnectionService {
   @override
   Future<void> leaveRoom(String roomJid, String nickname) async {
     // 实际操作应通过 GroupRepository
+  }
+
+  @override
+  Future<String?> getRoomAnnouncement(String roomJid) async {
+    // 实际操作应通过 GroupRepository
+    return null;
+  }
+
+  @override
+  Future<void> setRoomAnnouncement(String roomJid, String announcement) async {
+    // 实际操作应通过 GroupRepository
+  }
+
+  @override
+  Future<List<MucMember>> getRoomMembers(String roomJid) async {
+    // 实际操作应通过 GroupRepository
+    return [];
+  }
+
+  @override
+  Future<void> markAsRead(String peerJid) async {
+    // 实际操作应通过 IM Session
   }
 
   void _updateState(ImConnectionState state, {String? error}) {

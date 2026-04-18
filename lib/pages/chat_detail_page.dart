@@ -63,11 +63,50 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   /// 当前输入的文本（用于保存草稿）
   String _currentInputText = '';
 
+  /// 可提及的群成员（用于 @功能）
+  List<MentionableMember>? _mentionableMembers;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     _loadDraft();
+    if (widget.isGroup) {
+      _loadGroupMembers();
+    }
+    // 进入对话时标记已读
+    _markAsRead();
+  }
+
+  /// 标记对话消息已读
+  Future<void> _markAsRead() async {
+    try {
+      final service = ref.read(imConnectionServiceProvider);
+      await service.markAsRead(widget.conversationId);
+      // 同时清除本地未读计数
+      ref.read(conversationsProvider.notifier).clearUnread(widget.conversationId);
+    } catch (e) {
+      debugPrint('[ChatDetail] 标记已读失败: $e');
+    }
+  }
+
+  /// 加载群成员（用于 @功能）
+  Future<void> _loadGroupMembers() async {
+    try {
+      final service = ref.read(imConnectionServiceProvider);
+      final members = await service.getRoomMembers(widget.conversationId);
+      if (mounted) {
+        setState(() {
+          _mentionableMembers = members.map((m) => MentionableMember(
+            userBareJid: m.jid,
+            nickname: m.nickname ?? m.jid.split('@').first,
+          )).toList();
+        });
+      }
+    } catch (e) {
+      // 加载失败，静默处理
+      debugPrint('[ChatDetail] 加载群成员失败: $e');
+    }
   }
 
   @override
@@ -802,6 +841,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onMultipleImagesSelected: _onMultipleImagesSelected,
               onVideoSelected: _onVideoSelected,
               onFileSelected: _onFileSelected,
+              mentionableMembers: widget.isGroup ? _mentionableMembers : null,
             ),
           ]
           // 普通输入区域
@@ -815,6 +855,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onMultipleImagesSelected: _onMultipleImagesSelected,
               onVideoSelected: _onVideoSelected,
               onFileSelected: _onFileSelected,
+              mentionableMembers: widget.isGroup ? _mentionableMembers : null,
             )
           else
             _buildDisconnectedBar(colors),

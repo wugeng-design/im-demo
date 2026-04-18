@@ -317,6 +317,18 @@ class ConversationListPage extends ConsumerWidget {
               },
             ),
             ListTile(
+              leading: Icon(
+                conversation.isMuted ? Icons.notifications : Icons.notifications_off,
+              ),
+              title: Text(conversation.isMuted ? '取消免打扰' : '消息免打扰'),
+              onTap: () {
+                ref
+                    .read(conversationsProvider.notifier)
+                    .toggleMute(conversation.id);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title: const Text('删除会话', style: TextStyle(color: Colors.red)),
               onTap: () {
@@ -534,17 +546,27 @@ class _ConversationTile extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (conversation.lastMessageTime != null)
-            Text(
-              _formatTime(conversation.lastMessageTime!),
-              style: TextStyle(color: Colors.grey[500], fontSize: 12),
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (conversation.lastMessageTime != null)
+                Text(
+                  _formatTime(conversation.lastMessageTime!),
+                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                ),
+              if (conversation.isMuted) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.notifications_off, size: 14, color: Colors.grey[400]),
+              ],
+            ],
+          ),
           if (conversation.unreadCount > 0)
             Container(
               margin: const EdgeInsets.only(top: 4),
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.red,
+                // 免打扰时使用灰色角标
+                color: conversation.isMuted ? Colors.grey : Colors.red,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(

@@ -150,7 +150,21 @@ class FileMessageBubble extends StatelessWidget {
                           ),
                           const SizedBox(height: 4),
                           // 文件大小和状态
-                          _buildSubtitle(colors),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(child: _buildSubtitle(colors)),
+                              // 已读回执状态
+                              if (isSentByMe &&
+                                  status != null &&
+                                  status != MessageDisplayStatus.failed &&
+                                  status != MessageDisplayStatus.sending &&
+                                  uploadProgress == null) ...[
+                                const SizedBox(width: 6),
+                                _buildStatusIcon(colors),
+                              ],
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -296,5 +310,27 @@ class FileMessageBubble extends StatelessWidget {
     } else {
       return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
     }
+  }
+
+  /// 构建状态图标（已发送/已送达/已读）
+  Widget _buildStatusIcon(ImColorScheme colors) {
+    final IconData icon;
+    final Color color;
+
+    switch (status!) {
+      case MessageDisplayStatus.sent:
+        icon = Icons.check;
+        color = isSentByMe ? Colors.black45 : colors.textTertiary;
+      case MessageDisplayStatus.delivered:
+        icon = Icons.done_all;
+        color = isSentByMe ? Colors.black45 : colors.textTertiary;
+      case MessageDisplayStatus.read:
+        icon = Icons.done_all;
+        color = colors.info; // 蓝色表示已读
+      default:
+        return const SizedBox.shrink();
+    }
+
+    return Icon(icon, size: 14, color: color);
   }
 }

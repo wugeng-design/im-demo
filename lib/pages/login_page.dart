@@ -55,6 +55,152 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     super.dispose();
   }
 
+  void _showRegisterDialog() {
+    final regUsernameController = TextEditingController();
+    final regPasswordController = TextEditingController();
+    final regConfirmController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('注册新账号'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: regUsernameController,
+                decoration: const InputDecoration(
+                  labelText: '用户名',
+                  prefixIcon: Icon(Icons.person),
+                  hintText: '字母、数字，不含@',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: regPasswordController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: '密码',
+                  prefixIcon: Icon(Icons.lock),
+                  hintText: '至少6位',
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: regConfirmController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: '确认密码',
+                  prefixIcon: Icon(Icons.lock_outline),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '将注册到: ${_domainController.text}',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final username = regUsernameController.text.trim();
+              final password = regPasswordController.text.trim();
+              final confirm = regConfirmController.text.trim();
+
+              if (username.isEmpty || password.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('请填写用户名和密码')),
+                );
+                return;
+              }
+
+              if (username.contains('@')) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('用户名不能包含@符号')),
+                );
+                return;
+              }
+
+              if (password.length < 6) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('密码至少6位')),
+                );
+                return;
+              }
+
+              if (password != confirm) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('两次密码不一致')),
+                );
+                return;
+              }
+
+              Navigator.pop(context);
+
+              // 显示加载中
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const AlertDialog(
+                  content: Row(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(width: 16),
+                      Text('正在注册...'),
+                    ],
+                  ),
+                ),
+              );
+
+              try {
+                final service = ref.read(imConnectionServiceProvider);
+                // 需要先临时初始化 API 来注册
+                final config = ImSdkConfig(
+                  host: _hostController.text,
+                  port: int.tryParse(_portController.text) ?? 5222,
+                  domain: _domainController.text,
+                  useTls: _useTls,
+                  apiPort: 5280,
+                );
+                service.initApiClient(config);
+                await service.registerUser(
+                  username,
+                  password,
+                  _domainController.text,
+                );
+
+                if (mounted) {
+                  Navigator.pop(context); // 关闭加载对话框
+                  // 自动填入用户名密码
+                  _usernameController.text = username;
+                  _passwordController.text = password;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('注册成功，请点击登录')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  Navigator.pop(context); // 关闭加载对话框
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('注册失败: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('注册'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _login() async {
     if (_isConnecting) return;
 
@@ -315,6 +461,21 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('登录', style: TextStyle(fontSize: 16)),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // 注册按钮
+              SizedBox(
+                height: 50,
+                child: OutlinedButton(
+                  onPressed: _isConnecting ? null : _showRegisterDialog,
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('注册新账号', style: TextStyle(fontSize: 16)),
                 ),
               ),
 

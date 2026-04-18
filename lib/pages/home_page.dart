@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'conversation_list_page.dart';
+import 'contacts_page.dart';
 import 'profile_page.dart';
 
 /// 当前选中的 Tab 索引
@@ -19,6 +20,7 @@ class HomePage extends ConsumerWidget {
         index: currentIndex,
         children: const [
           ConversationListPage(),
+          ContactsPage(),
           ProfilePage(),
         ],
       ),
@@ -33,6 +35,11 @@ class HomePage extends ConsumerWidget {
             icon: Icon(Icons.chat_bubble_outline),
             activeIcon: Icon(Icons.chat_bubble),
             label: '消息',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people_outline),
+            activeIcon: Icon(Icons.people),
+            label: '通讯录',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),

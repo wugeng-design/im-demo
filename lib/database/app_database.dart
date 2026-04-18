@@ -16,6 +16,7 @@ class Conversations extends Table {
   IntColumn get unreadCount => integer().withDefault(const Constant(0))();
   BoolColumn get isGroup => boolean().withDefault(const Constant(false))();
   BoolColumn get isPinned => boolean().withDefault(const Constant(false))();
+  BoolColumn get isMuted => boolean().withDefault(const Constant(false))();
   TextColumn get avatar => text().nullable()();
   TextColumn get draft => text().nullable()(); // 草稿内容
   TextColumn get membersJson => text().nullable()(); // 群成员 JSON（用于群头像显示）
@@ -64,7 +65,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -83,6 +84,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 4) {
         // 添加 membersJson 字段（用于存储群成员头像数据）
         await m.addColumn(conversations, conversations.membersJson);
+      }
+      if (from < 5) {
+        // 添加 isMuted 字段（免打扰）
+        await m.addColumn(conversations, conversations.isMuted);
       }
     },
   );
@@ -155,10 +160,32 @@ class AppDatabase extends _$AppDatabase {
     }
   }
 
+  /// 切换免打扰状态
+  Future<void> toggleMute(String conversationId) async {
+    final conversation = await (select(conversations)
+          ..where((t) => t.id.equals(conversationId)))
+        .getSingleOrNull();
+    if (conversation != null) {
+      await (update(conversations)..where((t) => t.id.equals(conversationId)))
+          .write(ConversationsCompanion(isMuted: Value(!conversation.isMuted)));
+    }
+  }
+
   /// 删除会话及其消息
   Future<void> deleteConversation(String conversationId) async {
     await (delete(messages)..where((t) => t.conversationId.equals(conversationId))).go();
     await (delete(conversations)..where((t) => t.id.equals(conversationId))).go();
+  }
+
+  /// 清空会话的所有消息（保留会话本身）
+  Future<void> clearMessages(String conversationId) async {
+    await (delete(messages)..where((t) => t.conversationId.equals(conversationId))).go();
+    // 更新会话的最后一条消息为空
+    await (update(conversations)..where((t) => t.id.equals(conversationId)))
+        .write(const ConversationsCompanion(
+      lastMessage: Value(null),
+      unreadCount: Value(0),
+    ));
   }
 
   // ===== 消息操作 =====

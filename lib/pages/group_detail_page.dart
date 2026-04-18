@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../providers/im_provider.dart';
+import 'group_announcement_page.dart';
 import '../sdk/models/contact.dart';
 import '../sdk/models/conversation.dart';
 import '../sdk/services/impl/standalone_connection_service.dart';
@@ -41,7 +42,18 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
   @override
   void initState() {
     super.initState();
+    _loadConversationSettings();
     _loadGroupInfo();
+  }
+
+  void _loadConversationSettings() {
+    // 从会话中加载置顶/免打扰状态
+    final conversations = ref.read(conversationsProvider);
+    final conversation = conversations.where((c) => c.id == widget.groupId).firstOrNull;
+    if (conversation != null) {
+      _isPinned = conversation.isPinned;
+      _isMuted = conversation.isMuted;
+    }
   }
 
   Future<void> _loadGroupInfo() async {
@@ -397,6 +409,7 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
               value: _isMuted,
               onChanged: (value) {
                 setState(() => _isMuted = value);
+                ref.read(conversationsProvider.notifier).toggleMute(widget.groupId);
               },
             ),
             colors: colors,
@@ -849,8 +862,15 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
   }
 
   void _showGroupAnnouncement() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('群公告功能开发中')),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GroupAnnouncementPage(
+          groupId: widget.groupId,
+          groupName: widget.groupName,
+          isAdmin: _isAdmin,
+        ),
+      ),
     );
   }
 
@@ -874,10 +894,14 @@ class _GroupDetailPageState extends ConsumerState<GroupDetailPage> {
     );
 
     if (confirmed == true && mounted) {
-      // TODO: 清空聊天记录
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('聊天记录已清空')),
-      );
+      await ref.read(conversationsProvider.notifier).clearMessages(widget.groupId);
+      // 刷新消息列表
+      ref.invalidate(messagesProvider(widget.groupId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('聊天记录已清空')),
+        );
+      }
     }
   }
 

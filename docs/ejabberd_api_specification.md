@@ -987,6 +987,347 @@ modules:
 
 ---
 
+## 附录：扩展接口（需服务端开发）
+
+以下接口 ejabberd **不内置**或功能有限，如需使用需要服务端额外开发。
+
+### 8. 用户搜索
+
+#### 8.1 搜索用户
+
+根据关键词搜索用户（昵称、手机号等）。
+
+**请求**
+```
+POST /api/search_users
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| host | string | 是 | 域名 |
+| keyword | string | 是 | 搜索关键词 |
+| limit | int | 否 | 返回数量限制，默认 20 |
+
+**请求示例**
+```json
+{
+  "host": "localhost",
+  "keyword": "alice",
+  "limit": 10
+}
+```
+
+**响应示例**
+```json
+[
+  {
+    "jid": "alice@localhost",
+    "nickname": "Alice",
+    "avatar": "http://..."
+  }
+]
+```
+
+**开发建议**: 可基于 mod_vcard 的数据实现，或对接外部用户数据库。
+
+---
+
+### 9. 推送通知
+
+#### 9.1 发送推送通知
+
+向离线用户发送 APNs/FCM 推送通知。
+
+**请求**
+```
+POST /api/send_push
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 目标用户 |
+| host | string | 是 | 域名 |
+| title | string | 是 | 推送标题 |
+| body | string | 是 | 推送内容 |
+| data | object | 否 | 自定义数据 |
+
+**请求示例**
+```json
+{
+  "user": "alice",
+  "host": "localhost",
+  "title": "新消息",
+  "body": "Bob: 你好！",
+  "data": {
+    "type": "chat",
+    "from": "bob@localhost"
+  }
+}
+```
+
+**开发建议**: 需要集成 APNs (iOS) 和 FCM (Android) 推送服务，可使用 mod_push 或自定义实现。
+
+---
+
+### 10. 消息撤回
+
+#### 10.1 撤回消息
+
+撤回已发送的消息。
+
+**请求**
+```
+POST /api/recall_message
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| from | string | 是 | 发送者 JID |
+| to | string | 是 | 接收者 JID |
+| message_id | string | 是 | 消息 ID |
+
+**请求示例**
+```json
+{
+  "from": "alice@localhost",
+  "to": "bob@localhost",
+  "message_id": "msg-123456"
+}
+```
+
+**开发建议**: 需要向对方发送撤回通知（XEP-0424），并从 MAM 存档中标记/删除消息。
+
+---
+
+### 11. 已读回执
+
+#### 11.1 标记消息已读
+
+标记与某用户的会话消息已读。
+
+**请求**
+```
+POST /api/mark_as_read
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 当前用户 |
+| host | string | 是 | 域名 |
+| peer | string | 是 | 对方 JID |
+| up_to_id | string | 否 | 已读到的消息 ID |
+
+**请求示例**
+```json
+{
+  "user": "alice",
+  "host": "localhost",
+  "peer": "bob@localhost",
+  "up_to_id": "msg-123456"
+}
+```
+
+**开发建议**: 需要存储已读状态，并向对方发送已读通知（XEP-0333）。
+
+---
+
+### 12. 用户封禁
+
+#### 12.1 封禁用户
+
+临时或永久封禁用户。
+
+**请求**
+```
+POST /api/ban_user
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| user | string | 是 | 用户名 |
+| host | string | 是 | 域名 |
+| duration | int | 否 | 封禁时长（秒），0 表示永久 |
+| reason | string | 否 | 封禁原因 |
+
+**请求示例**
+```json
+{
+  "user": "baduser",
+  "host": "localhost",
+  "duration": 86400,
+  "reason": "违规发言"
+}
+```
+
+**开发建议**: 可通过修改用户密码+踢下线实现，或使用 ACL 黑名单。
+
+---
+
+### 13. 敏感词过滤
+
+#### 13.1 检查消息内容
+
+检查消息是否包含敏感词。
+
+**请求**
+```
+POST /api/check_content
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| content | string | 是 | 待检查内容 |
+
+**响应示例**
+```json
+{
+  "passed": false,
+  "blocked_words": ["xxx"],
+  "suggestion": "replace"
+}
+```
+
+**开发建议**: 可对接第三方内容审核服务（阿里云、腾讯云等）。
+
+---
+
+### 14. 批量在线状态
+
+#### 14.1 批量查询用户在线状态
+
+一次查询多个用户的在线状态。
+
+**请求**
+```
+POST /api/get_users_presence
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| users | array | 是 | 用户 JID 列表 |
+
+**请求示例**
+```json
+{
+  "users": ["alice@localhost", "bob@localhost", "charlie@localhost"]
+}
+```
+
+**响应示例**
+```json
+[
+  {"jid": "alice@localhost", "online": true, "show": "available"},
+  {"jid": "bob@localhost", "online": false, "last_seen": 1707123456},
+  {"jid": "charlie@localhost", "online": true, "show": "away"}
+]
+```
+
+**开发建议**: 可基于 ejabberd 的 session 表批量查询优化性能。
+
+---
+
+### 15. 群公告
+
+#### 15.1 设置群公告
+
+设置群聊公告（置顶通知）。
+
+**请求**
+```
+POST /api/set_room_announcement
+```
+
+**参数**
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| name | string | 是 | 房间名称 |
+| service | string | 是 | MUC 服务域名 |
+| announcement | string | 是 | 公告内容 |
+| sender | string | 否 | 发布者 JID |
+
+**请求示例**
+```json
+{
+  "name": "room123",
+  "service": "conference.localhost",
+  "announcement": "本群禁止发广告！",
+  "sender": "admin@localhost"
+}
+```
+
+**开发建议**: 可使用 change_room_option 的 subject，或自定义存储。
+
+---
+
+## 扩展接口汇总
+
+### 扩展接口实现状态
+
+| 分类 | API | 功能 | 服务端 | 客户端 | 备注 |
+|------|-----|------|:------:|:------:|------|
+| 用户搜索 | search_users | 搜索用户 | ✅ | ✅ | 支持昵称/用户名模糊搜索 |
+| 推送通知 | send_push | 发送推送 | ✅ | ⏳ | 待客户端集成 FCM/APNs |
+| 消息撤回 | recall_message | 撤回消息 | ✅ | ✅ | 2分钟内可撤回 |
+| 已读回执 | mark_as_read | 标记已读 | ✅ | ✅ | 配合 XEP-0333 使用 |
+| 用户封禁 | ban_user | 封禁用户 | ✅ | ⏳ | 管理后台功能 |
+| 敏感词 | check_content | 内容审核 | ✅ | ⏳ | 待客户端集成 |
+| 在线状态 | get_users_presence | 批量查询在线 | ✅ | ✅ | 一次查询多个用户 |
+| 群公告 | set_room_announcement | 设置群公告 | ✅ | ✅ | 支持公告历史 |
+
+### 待客户端集成的功能
+
+#### 1. 推送通知 (send_push)
+- **服务端**: 已实现，支持 APNs/FCM 推送
+- **客户端**: 需要集成 Firebase Cloud Messaging (Android) 和 APNs (iOS)
+- **流程**: 客户端获取 device token → 上报服务端 → 离线时服务端推送
+
+#### 2. 用户封禁 (ban_user)
+- **服务端**: 已实现，支持临时/永久封禁
+- **客户端**: 管理后台功能，普通用户端暂不需要
+
+#### 3. 敏感词过滤 (check_content)
+- **服务端**: 已实现，支持敏感词检测和替换
+- **客户端**: 可在发送消息前调用检测，或由服务端自动过滤
+
+### ejabberd 内置接口（已实现）
+
+| 分类 | API | 功能 |
+|------|-----|------|
+| 用户管理 | check_account | 检查用户是否存在 |
+| 用户管理 | registered_users | 获取用户列表 |
+| 用户管理 | get_vcard | 获取用户资料 |
+| 用户管理 | set_vcard2 | 设置用户资料 |
+| 用户管理 | register | 注册用户 |
+| 用户管理 | unregister | 注销用户 |
+| 用户管理 | change_password | 修改密码 |
+| 好友管理 | get_roster | 获取好友列表 |
+| 好友管理 | add_rosteritem | 添加好友 |
+| 好友管理 | delete_rosteritem | 删除好友 |
+| MUC 群聊 | create_room | 创建群聊 |
+| MUC 群聊 | destroy_room | 销毁群聊 |
+| MUC 群聊 | get_room_occupants | 获取在线成员 |
+| MUC 群聊 | get_room_affiliations | 获取全部成员 |
+| MUC 群聊 | set_room_affiliation | 设置成员角色 |
+| MUC 群聊 | get_room_options | 获取群配置 |
+| MUC 群聊 | change_room_option | 修改群配置 |
+| MUC 群聊 | send_direct_invitation | 邀请用户入群 |
+| MUC 群聊 | muc_online_rooms | 获取在线群列表 |
+| MUC 群聊 | get_user_rooms | 获取用户群列表 |
+| 消息状态 | get_offline_count | 离线消息数量 |
+| 消息状态 | get_last | 最后活动时间 |
+| 消息状态 | send_message | 服务端发消息 |
+| 服务器 | connected_users_number | 在线用户数 |
+| 服务器 | stats | 服务器统计 |
+
+---
+
 ## 版本历史
 
 | 版本 | 日期 | 说明 |
@@ -994,3 +1335,6 @@ modules:
 | 1.0.0 | 2024-02 | 初始版本，包含用户管理和 MUC 群聊管理 API |
 | 1.1.0 | 2024-02 | 添加 vCard 头像上传支持 |
 | 1.2.0 | 2024-02 | 添加用户注册、好友管理、消息和服务器状态 API |
+| 1.3.0 | 2024-02 | 添加扩展接口文档（需服务端开发） |
+| 1.4.0 | 2024-02 | 完善扩展接口汇总，添加客户端临时方案说明和内置接口清单 |
+| 1.5.0 | 2024-02 | 服务端扩展接口已开发完成，更新实现状态 |

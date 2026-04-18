@@ -164,9 +164,29 @@ class MessageBubble extends StatelessWidget {
                         fontSize: 15,
                       ),
                     ),
-                    // 时间和状态（微信风格：不显示）
-                    // const SizedBox(height: 4),
-                    // _buildFooter(colors),
+                    // 消息状态（自己发送的消息显示）
+                    if (isSentByMe && status != null && status != MessageDisplayStatus.failed)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (isEdited) ...[
+                              Text(
+                                '已编辑',
+                                style: TextStyle(
+                                  color: Colors.black45,
+                                  fontSize: 10,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            _buildStatusIcon(colors),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),

@@ -20,6 +20,7 @@ class Conversation {
   final DateTime? lastMessageTime;
   final int unreadCount;
   final bool isPinned;
+  final bool isMuted;
   final bool isGroup;
   final String? draft;
   /// 群成员列表（用于群头像显示，最多9个）
@@ -33,6 +34,7 @@ class Conversation {
     this.lastMessageTime,
     this.unreadCount = 0,
     this.isPinned = false,
+    this.isMuted = false,
     this.isGroup = false,
     this.draft,
     this.members,
@@ -49,6 +51,7 @@ class Conversation {
     DateTime? lastMessageTime,
     int? unreadCount,
     bool? isPinned,
+    bool? isMuted,
     bool? isGroup,
     String? draft,
     List<ConversationMember>? members,
@@ -61,6 +64,7 @@ class Conversation {
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,
       unreadCount: unreadCount ?? this.unreadCount,
       isPinned: isPinned ?? this.isPinned,
+      isMuted: isMuted ?? this.isMuted,
       isGroup: isGroup ?? this.isGroup,
       draft: draft ?? this.draft,
       members: members ?? this.members,

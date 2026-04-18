@@ -6,6 +6,9 @@ import '../../theme/im_design_tokens.dart';
 import 'attachment_models.dart';
 import 'attachment_panel.dart';
 import 'emoji_panel.dart';
+import 'mention_models.dart';
+import 'mention_overlay.dart';
+import 'mention_utils.dart';
 
 /// 消息输入区域
 class MessageInputArea extends StatefulWidget {
@@ -19,6 +22,7 @@ class MessageInputArea extends StatefulWidget {
     this.onMultipleImagesSelected,
     this.onVideoSelected,
     this.onFileSelected,
+    this.mentionableMembers,
   });
 
   /// 发送消息回调
@@ -45,6 +49,9 @@ class MessageInputArea extends StatefulWidget {
   /// 文件选择回调
   final void Function(File file)? onFileSelected;
 
+  /// 可提及的成员列表（群聊时传入）
+  final List<MentionableMember>? mentionableMembers;
+
   @override
   State<MessageInputArea> createState() => MessageInputAreaState();
 }
@@ -55,6 +62,9 @@ class MessageInputAreaState extends State<MessageInputArea> {
   bool _showAttachmentPanel = false;
   bool _showEmojiPanel = false;
   bool _hasText = false;
+
+  /// @提及检测结果
+  MentionDetectionResult _mentionDetection = MentionDetectionResult.empty;
 
   /// 获取当前文本
   String get currentText => _textController.text;
@@ -98,6 +108,20 @@ class MessageInputAreaState extends State<MessageInputArea> {
       setState(() => _hasText = hasText);
     }
     widget.onTextChanged?.call(_textController.text);
+
+    // 检测 @提及
+    if (widget.mentionableMembers != null && widget.mentionableMembers!.isNotEmpty) {
+      final newDetection = detectMention(
+        _textController.text,
+        _textController.selection.baseOffset,
+      );
+      if (newDetection.isActive != _mentionDetection.isActive ||
+          newDetection.query != _mentionDetection.query) {
+        setState(() {
+          _mentionDetection = newDetection;
+        });
+      }
+    }
   }
 
   @override
@@ -108,6 +132,13 @@ class MessageInputAreaState extends State<MessageInputArea> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // @提及选择面板
+        if (_mentionDetection.isActive && widget.mentionableMembers != null)
+          MentionOverlay(
+            members: widget.mentionableMembers!,
+            query: _mentionDetection.query,
+            onMemberSelected: _onMentionMemberSelected,
+          ),
         // 输入栏
         Container(
           decoration: BoxDecoration(
@@ -252,6 +283,35 @@ class MessageInputAreaState extends State<MessageInputArea> {
         _showEmojiPanel = false;
       });
     }
+  }
+
+  /// 处理 @提及成员选择
+  void _onMentionMemberSelected(MentionableMember member) {
+    final text = _textController.text;
+    final cursorPosition = _textController.selection.baseOffset;
+
+    // 替换 @query 为 @[nickname](userBareJid)
+    final newText = replaceMention(
+      text,
+      _mentionDetection.startIndex,
+      cursorPosition,
+      member,
+    );
+
+    _textController.text = newText;
+
+    // 将光标移动到插入的提及之后
+    final newCursorPosition = _mentionDetection.startIndex +
+        '@[${member.nickname}](${member.userBareJid}) '.length;
+    _textController.selection = TextSelection.collapsed(offset: newCursorPosition);
+
+    // 清除提及检测状态
+    setState(() {
+      _mentionDetection = MentionDetectionResult.empty;
+    });
+
+    // 重新获取焦点
+    _focusNode.requestFocus();
   }
 
   /// 插入 Emoji 到当前光标位置

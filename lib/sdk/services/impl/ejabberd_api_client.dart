@@ -573,6 +573,182 @@ class EjabberdApiClient {
       return 0;
     }
   }
+
+  // ============================================================================
+  // 扩展 API（需服务端实现）
+  // ============================================================================
+
+  /// 搜索用户
+  ///
+  /// [host] 域名
+  /// [keyword] 搜索关键词
+  /// [limit] 返回数量限制
+  Future<List<SearchUserResult>> searchUsers(
+    String host,
+    String keyword, {
+    int limit = 20,
+  }) async {
+    try {
+      final result = await _request('search_users', {
+        'host': host,
+        'keyword': keyword,
+        'limit': limit,
+      });
+
+      if (result == null || result is! List) return [];
+      return result
+          .map((item) => SearchUserResult.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('[EjabberdAPI] 搜索用户失败: $e');
+      return [];
+    }
+  }
+
+  /// 批量获取用户在线状态
+  Future<List<UserPresence>> getUsersPresence(List<String> users) async {
+    try {
+      final result = await _request('get_users_presence', {
+        'users': users,
+      });
+
+      if (result == null || result is! List) return [];
+      return result
+          .map((item) => UserPresence.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('[EjabberdAPI] 获取在线状态失败: $e');
+      return [];
+    }
+  }
+
+  /// 撤回消息
+  Future<void> recallMessage({
+    required String from,
+    required String to,
+    required String messageId,
+  }) async {
+    await _request('recall_message', {
+      'from': from,
+      'to': to,
+      'message_id': messageId,
+    });
+  }
+
+  /// 标记消息已读
+  Future<void> markAsRead({
+    required String user,
+    required String host,
+    required String peer,
+    String? upToId,
+  }) async {
+    await _request('mark_as_read', {
+      'user': user,
+      'host': host,
+      'peer': peer,
+      if (upToId != null) 'up_to_id': upToId,
+    });
+  }
+
+  /// 设置群公告
+  Future<void> setRoomAnnouncement({
+    required String room,
+    required String service,
+    required String announcement,
+    String? sender,
+  }) async {
+    await _request('set_room_announcement', {
+      'name': room,
+      'service': service,
+      'announcement': announcement,
+      if (sender != null) 'sender': sender,
+    });
+  }
+
+  /// 获取群公告
+  Future<String?> getRoomAnnouncement(String room, String service) async {
+    try {
+      final options = await getRoomOptions(room, service);
+      return options['announcement'] as String?;
+    } catch (e) {
+      return null;
+    }
+  }
+}
+
+/// 用户搜索结果
+class SearchUserResult {
+  final String jid;
+  final String? nickname;
+  final String? avatar;
+
+  SearchUserResult({
+    required this.jid,
+    this.nickname,
+    this.avatar,
+  });
+
+  factory SearchUserResult.fromJson(Map<String, dynamic> json) {
+    return SearchUserResult(
+      jid: json['jid'] ?? '',
+      nickname: json['nickname'],
+      avatar: json['avatar'],
+    );
+  }
+
+  String get displayName => nickname ?? jid.split('@').first;
+}
+
+/// 用户在线状态
+class UserPresence {
+  final String jid;
+  final bool online;
+  final String? show;
+  final int? lastSeen;
+
+  UserPresence({
+    required this.jid,
+    required this.online,
+    this.show,
+    this.lastSeen,
+  });
+
+  factory UserPresence.fromJson(Map<String, dynamic> json) {
+    return UserPresence(
+      jid: json['jid'] ?? '',
+      online: json['online'] ?? false,
+      show: json['show'],
+      lastSeen: json['last_seen'],
+    );
+  }
+
+  String get statusText {
+    if (!online) {
+      if (lastSeen != null) {
+        final dt = DateTime.fromMillisecondsSinceEpoch(lastSeen! * 1000);
+        final now = DateTime.now();
+        final diff = now.difference(dt);
+        if (diff.inMinutes < 60) {
+          return '${diff.inMinutes}分钟前在线';
+        } else if (diff.inHours < 24) {
+          return '${diff.inHours}小时前在线';
+        } else {
+          return '${diff.inDays}天前在线';
+        }
+      }
+      return '离线';
+    }
+    switch (show) {
+      case 'away':
+        return '离开';
+      case 'xa':
+        return '忙碌';
+      case 'dnd':
+        return '勿扰';
+      default:
+        return '在线';
+    }
+  }
 }
 
 /// MUC 在线成员信息

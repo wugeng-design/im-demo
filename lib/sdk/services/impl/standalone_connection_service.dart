@@ -29,33 +29,47 @@ class ReceivedMessage {
   String toString() => 'ReceivedMessage(from: $from, body: $body)';
 }
 
-/// MUC 群成员信息
-class MucMember {
-  /// 成员 JID（bare JID）
-  final String jid;
+/// Chat Marker 事件 (XEP-0333)
+///
+/// 当接收到对方发送的已读/已送达回执时触发
+class ChatMarkerEvent {
+  /// 发送者 JID (对方)
+  final String from;
 
-  /// 群内昵称
-  final String? nickname;
+  /// 原消息 ID
+  final String messageId;
 
-  /// 角色 (owner/admin/member/outcast/none)
-  final String affiliation;
+  /// 标记类型: received, displayed, acknowledged
+  final ChatMarkerType type;
 
-  /// 当前状态 (moderator/participant/visitor/none)
-  final String role;
+  /// 时间戳
+  final DateTime timestamp;
 
-  MucMember({
-    required this.jid,
-    this.nickname,
-    this.affiliation = 'member',
-    this.role = 'participant',
-  });
-
-  bool get isOwner => affiliation == 'owner';
-  bool get isAdmin => affiliation == 'admin' || affiliation == 'owner';
+  ChatMarkerEvent({
+    required this.from,
+    required this.messageId,
+    required this.type,
+    DateTime? timestamp,
+  }) : timestamp = timestamp ?? DateTime.now();
 
   @override
-  String toString() => 'MucMember(jid: $jid, affiliation: $affiliation)';
+  String toString() =>
+      'ChatMarkerEvent(from: $from, messageId: $messageId, type: $type)';
 }
+
+/// Chat Marker 类型
+enum ChatMarkerType {
+  /// 已接收 (消息已到达对方设备)
+  received,
+
+  /// 已读 (对方已查看消息)
+  displayed,
+
+  /// 已确认 (对方已确认消息)
+  acknowledged,
+}
+
+// MucMember is defined in im_connection_service.dart
 
 /// 独立 XMPP 连接服务
 ///
@@ -69,6 +83,7 @@ class StandaloneConnectionService implements ImConnectionService {
   Whixp? _whixp;
   final _stateController = StreamController<ConnectionStateEvent>.broadcast();
   final _messageController = StreamController<ReceivedMessage>.broadcast();
+  final _chatMarkerController = StreamController<ChatMarkerEvent>.broadcast();
   ImConnectionState _currentState = ImConnectionState.disconnected;
   String? _currentJid;
   String? _dbPath;
@@ -208,6 +223,9 @@ class StandaloneConnectionService implements ImConnectionService {
 
   /// 接收消息流
   Stream<ReceivedMessage> get messageStream => _messageController.stream;
+
+  /// Chat Marker 事件流 (已读/已送达回执)
+  Stream<ChatMarkerEvent> get chatMarkerStream => _chatMarkerController.stream;
 
   @override
   String? get currentJid => _currentJid;
@@ -391,26 +409,32 @@ class StandaloneConnectionService implements ImConnectionService {
           return;
         }
 
+        final fromObj = message.from;
+        String fromJid;
+        if (fromObj == null) {
+          fromJid = 'unknown';
+        } else {
+          fromJid = fromObj.bare.isNotEmpty ? fromObj.bare : fromObj.full;
+        }
+
+        // 检查 Chat Markers (XEP-0333)
+        _handleChatMarkers(message, fromJid);
+
         final body = message.body;
         if (body != null && body.isNotEmpty) {
           // 详细日志：检查 from 字段
-          final fromObj = message.from;
-          String fromJid;
-          if (fromObj == null) {
-            fromJid = 'unknown';
-            print('[Whixp] Message from is NULL');
-          } else {
+          if (fromObj != null) {
             // 使用 full 获取完整 JID（包括 resource）
-            fromJid = fromObj.full.isNotEmpty ? fromObj.full : fromObj.toString();
+            final fullJid = fromObj.full.isNotEmpty ? fromObj.full : fromObj.toString();
             print('[Whixp] Message from - full: "${fromObj.full}", bare: "${fromObj.bare}", resource: "${fromObj.resource}"');
+            print('[Whixp] Message received - from: $fullJid, type: ${message.type}, body: $body');
+            _messageController.add(ReceivedMessage(
+              from: fullJid,
+              to: message.to?.toString(),
+              body: body,
+              type: message.type ?? 'chat',
+            ));
           }
-          print('[Whixp] Message received - from: $fromJid, type: ${message.type}, body: $body');
-          _messageController.add(ReceivedMessage(
-            from: fromJid,
-            to: message.to?.toString(),
-            body: body,
-            type: message.type ?? 'chat',
-          ));
         }
       });
 
@@ -566,6 +590,16 @@ class StandaloneConnectionService implements ImConnectionService {
 
     // 等待一小段时间让房间创建完成
     await Future.delayed(const Duration(milliseconds: 500));
+
+    // 设置房间为持久化（防止所有人离开后房间被销毁）
+    final (room, service) = _parseRoomJid(roomJid);
+    try {
+      await _ejabberdApi?.changeRoomOption(room, service, 'persistent', 'true');
+      await _ejabberdApi?.changeRoomOption(room, service, 'title', roomName);
+      print('[MUC] 已设置房间持久化: $roomJid');
+    } catch (e) {
+      print('[MUC] 设置房间选项失败: $e');
+    }
 
     // 邀请成员，传递群名，并通过 API 添加到房间成员列表
     final invitedNames = <String>[];
@@ -805,6 +839,56 @@ class StandaloneConnectionService implements ImConnectionService {
     }
   }
 
+  /// 处理 Chat Markers (XEP-0333)
+  ///
+  /// 检测消息中的 <received>, <displayed>, <acknowledged> 元素
+  /// 并发出相应的 ChatMarkerEvent
+  void _handleChatMarkers(Message message, String fromJid) {
+    // 检查 displayed 标记 (已读)
+    final displayedExt = message.getExtension('displayed');
+    if (displayedExt != null) {
+      final messageId = displayedExt.attributes['id'];
+      if (messageId != null && messageId.isNotEmpty) {
+        print('[ChatMarker] Received displayed marker for message: $messageId from: $fromJid');
+        _chatMarkerController.add(ChatMarkerEvent(
+          from: fromJid,
+          messageId: messageId,
+          type: ChatMarkerType.displayed,
+        ));
+      }
+      return;
+    }
+
+    // 检查 received 标记 (已送达)
+    final receivedExt = message.getExtension('received');
+    if (receivedExt != null) {
+      final messageId = receivedExt.attributes['id'];
+      if (messageId != null && messageId.isNotEmpty) {
+        print('[ChatMarker] Received delivered marker for message: $messageId from: $fromJid');
+        _chatMarkerController.add(ChatMarkerEvent(
+          from: fromJid,
+          messageId: messageId,
+          type: ChatMarkerType.received,
+        ));
+      }
+      return;
+    }
+
+    // 检查 acknowledged 标记 (已确认)
+    final acknowledgedExt = message.getExtension('acknowledged');
+    if (acknowledgedExt != null) {
+      final messageId = acknowledgedExt.attributes['id'];
+      if (messageId != null && messageId.isNotEmpty) {
+        print('[ChatMarker] Received acknowledged marker for message: $messageId from: $fromJid');
+        _chatMarkerController.add(ChatMarkerEvent(
+          from: fromJid,
+          messageId: messageId,
+          type: ChatMarkerType.acknowledged,
+        ));
+      }
+    }
+  }
+
   void _updateState(ImConnectionState state, {String? error}) {
     _currentState = state;
     _stateController.add(ConnectionStateEvent(state: state, error: error));
@@ -819,6 +903,7 @@ class StandaloneConnectionService implements ImConnectionService {
     disconnect();
     _stateController.close();
     _messageController.close();
+    _chatMarkerController.close();
   }
 
   /// 手动触发重连
@@ -856,5 +941,192 @@ class StandaloneConnectionService implements ImConnectionService {
       print('[Connection] 获取注册用户失败: $e');
       return [];
     }
+  }
+
+  /// 初始化 API 客户端（用于未登录时的操作，如注册）
+  void initApiClient(ImSdkConfig config) {
+    final apiPort = config.apiPort ?? 5280;
+    final apiScheme = config.useTls ? 'https' : 'http';
+    _ejabberdApi = EjabberdApiClient(
+      baseUrl: '$apiScheme://${config.host}:$apiPort',
+    );
+  }
+
+  // ============================================================================
+  // 用户账号管理
+  // ============================================================================
+
+  /// 修改当前用户密码
+  Future<void> changePassword(String newPassword) async {
+    if (_ejabberdApi == null || _currentJid == null) {
+      throw StateError('未登录或 API 未初始化');
+    }
+
+    final parts = _currentJid!.split('@');
+    if (parts.length != 2) {
+      throw StateError('无效的 JID 格式');
+    }
+
+    final user = parts[0];
+    final host = parts[1];
+
+    print('[Account] 修改密码: $user@$host');
+
+    try {
+      await _ejabberdApi!.changePassword(user, host, newPassword);
+      // 更新保存的凭证
+      if (_savedCredentials != null) {
+        _savedCredentials = ImCredentials(
+          username: _savedCredentials!.username,
+          password: newPassword,
+        );
+      }
+      print('[Account] 密码修改成功');
+    } catch (e) {
+      print('[Account] 密码修改失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 注册新用户
+  Future<void> registerUser(String username, String password, String host) async {
+    if (_ejabberdApi == null) {
+      throw StateError('API 未初始化');
+    }
+
+    print('[Account] 注册用户: $username@$host');
+
+    try {
+      await _ejabberdApi!.register(username, host, password);
+      print('[Account] 用户注册成功');
+    } catch (e) {
+      print('[Account] 用户注册失败: $e');
+      rethrow;
+    }
+  }
+
+  /// 获取好友列表
+  Future<List<RosterItem>> getRoster() async {
+    if (_ejabberdApi == null || _currentJid == null) {
+      return [];
+    }
+
+    final parts = _currentJid!.split('@');
+    if (parts.length != 2) return [];
+
+    try {
+      return await _ejabberdApi!.getRoster(parts[0], parts[1]);
+    } catch (e) {
+      print('[Roster] 获取好友列表失败: $e');
+      return [];
+    }
+  }
+
+  /// 添加好友
+  Future<void> addFriend(String friendJid, String nick) async {
+    if (_ejabberdApi == null || _currentJid == null) {
+      throw StateError('未登录');
+    }
+
+    final parts = _currentJid!.split('@');
+    if (parts.length != 2) {
+      throw StateError('无效的 JID');
+    }
+
+    print('[Roster] 添加好友: $friendJid');
+
+    await _ejabberdApi!.addRosterItem(
+      parts[0],
+      parts[1],
+      friendJid,
+      nick,
+      subscription: 'both',
+    );
+  }
+
+  /// 删除好友
+  Future<void> removeFriend(String friendJid) async {
+    if (_ejabberdApi == null || _currentJid == null) {
+      throw StateError('未登录');
+    }
+
+    final parts = _currentJid!.split('@');
+    if (parts.length != 2) {
+      throw StateError('无效的 JID');
+    }
+
+    print('[Roster] 删除好友: $friendJid');
+
+    await _ejabberdApi!.deleteRosterItem(parts[0], parts[1], friendJid);
+  }
+
+  // ============================================================================
+  // 扩展功能
+  // ============================================================================
+
+  /// 搜索用户
+  ///
+  /// 调用服务端 search_users API 进行搜索
+  Future<List<SearchUserResult>> searchUsers(String keyword) async {
+    if (_ejabberdApi == null) return [];
+    final host = _savedConfig?.domain ?? 'localhost';
+
+    try {
+      return await _ejabberdApi!.searchUsers(host, keyword);
+    } catch (e) {
+      print('[Search] 搜索用户失败: $e');
+      return [];
+    }
+  }
+
+  /// 获取用户在线状态
+  Future<List<UserPresence>> getUsersPresence(List<String> users) async {
+    if (_ejabberdApi == null) return [];
+    return await _ejabberdApi!.getUsersPresence(users);
+  }
+
+  /// 撤回消息
+  Future<void> recallMessage(String toJid, String messageId) async {
+    if (_ejabberdApi == null || _currentJid == null) {
+      throw StateError('未登录');
+    }
+    await _ejabberdApi!.recallMessage(
+      from: _currentJid!,
+      to: toJid,
+      messageId: messageId,
+    );
+  }
+
+  /// 标记已读
+  Future<void> markAsRead(String peerJid) async {
+    if (_ejabberdApi == null || _currentJid == null) return;
+    final parts = _currentJid!.split('@');
+    if (parts.length != 2) return;
+    await _ejabberdApi!.markAsRead(
+      user: parts[0],
+      host: parts[1],
+      peer: peerJid,
+    );
+  }
+
+  /// 设置群公告
+  Future<void> setRoomAnnouncement(String roomJid, String announcement) async {
+    if (_ejabberdApi == null) {
+      throw StateError('API 未初始化');
+    }
+    final (room, service) = _parseRoomJid(roomJid);
+    await _ejabberdApi!.setRoomAnnouncement(
+      room: room,
+      service: service,
+      announcement: announcement,
+      sender: _currentJid,
+    );
+  }
+
+  /// 获取群公告
+  Future<String?> getRoomAnnouncement(String roomJid) async {
+    if (_ejabberdApi == null) return null;
+    final (room, service) = _parseRoomJid(roomJid);
+    return await _ejabberdApi!.getRoomAnnouncement(room, service);
   }
 }

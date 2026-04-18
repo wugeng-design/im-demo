@@ -172,9 +172,18 @@ class ReplyMessageBubble extends StatelessWidget {
                             fontSize: 15,
                           ),
                         ),
-                        // 时间和状态（微信风格：不显示）
-                        // const SizedBox(height: 4),
-                        // _buildFooter(colors, displayStatus),
+                        // 消息状态（自己发送的消息显示）
+                        if (isSentByMe && displayStatus != null && displayStatus != MessageDisplayStatus.failed)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                _buildStatusIcon(colors, displayStatus),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),

@@ -175,6 +175,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   final Ref ref;
   StreamSubscription? _messageSubscription;
   StreamSubscription? _dbSubscription;
+  StreamSubscription? _chatMarkerSubscription;
 
   ConversationsNotifier(this.ref) : super([]) {
     _init();
@@ -187,6 +188,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     _listenToDatabase();
     // 监听远程消息
     _listenToMessages();
+    // 监听已读回执
+    _listenToChatMarkers();
   }
 
   Future<void> _loadFromDatabase() async {
@@ -206,6 +209,35 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     _messageSubscription = service.messageStream.listen((message) {
       _handleIncomingMessage(message);
     });
+  }
+
+  void _listenToChatMarkers() {
+    final service = ref.read(imConnectionServiceProvider);
+    _chatMarkerSubscription = service.chatMarkerStream.listen((event) {
+      _handleChatMarker(event);
+    });
+  }
+
+  Future<void> _handleChatMarker(ChatMarkerEvent event) async {
+    final repository = ref.read(repositoryProvider);
+
+    // 根据 marker 类型更新消息状态
+    String newStatus;
+    switch (event.type) {
+      case ChatMarkerType.received:
+        newStatus = 'delivered';
+      case ChatMarkerType.displayed:
+        newStatus = 'read';
+      case ChatMarkerType.acknowledged:
+        newStatus = 'read'; // acknowledged 也视为已读
+    }
+
+    try {
+      await repository.updateMessageStatus(event.messageId, newStatus);
+      print('[ChatMarker] Updated message ${event.messageId} status to $newStatus');
+    } catch (e) {
+      print('[ChatMarker] Failed to update message status: $e');
+    }
   }
 
   Future<void> _handleIncomingMessage(ReceivedMessage message) async {
@@ -418,6 +450,18 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
     await repository.togglePin(conversationId);
   }
 
+  /// 免打扰/取消免打扰
+  Future<void> toggleMute(String conversationId) async {
+    final repository = ref.read(repositoryProvider);
+    await repository.toggleMute(conversationId);
+  }
+
+  /// 清空会话的所有消息
+  Future<void> clearMessages(String conversationId) async {
+    final repository = ref.read(repositoryProvider);
+    await repository.clearMessages(conversationId);
+  }
+
   /// 删除会话
   Future<void> removeConversation(String conversationId) async {
     final repository = ref.read(repositoryProvider);
@@ -428,6 +472,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   void dispose() {
     _messageSubscription?.cancel();
     _dbSubscription?.cancel();
+    _chatMarkerSubscription?.cancel();
     super.dispose();
   }
 }
@@ -677,17 +722,25 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
 
   /// 撤回消息
   ///
-  /// 目前只是本地删除并添加系统消息
-  /// 实际项目中需要调用 XMPP 撤回协议
+  /// 调用服务端 API 撤回消息，并更新本地状态
   Future<void> recallMessage(String messageId) async {
     final repository = ref.read(repositoryProvider);
     final db = ref.read(databaseProvider);
+    final connectionService = ref.read(imConnectionServiceProvider);
 
     // 找到要撤回的消息
     final message = state.firstWhere(
       (m) => m.id == messageId,
       orElse: () => throw StateError('Message not found'),
     );
+
+    // 调用服务端撤回 API
+    try {
+      await connectionService.recallMessage(conversationId, messageId);
+    } catch (e) {
+      print('[Messages] 服务端撤回失败: $e');
+      // 服务端失败时仍继续本地撤回，保证用户体验
+    }
 
     // 从数据库删除原消息
     await (db.delete(db.messages)..where((t) => t.id.equals(messageId))).go();
@@ -705,8 +758,6 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
     );
 
     await repository.saveMessage(recallNotice);
-
-    // TODO: 实际项目中这里应该发送 XMPP 撤回请求
   }
 
   /// 编辑消息

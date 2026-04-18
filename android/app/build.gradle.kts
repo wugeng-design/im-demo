@@ -12,6 +12,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -62,7 +63,13 @@ android {
                 "/META-INF/LICENSE.txt",
                 "/META-INF/NOTICE",
                 "/META-INF/NOTICE.txt",
-                "META-INF/services/javax.annotation.processing.Processor"
+                "META-INF/services/javax.annotation.processing.Processor",
+                "/META-INF/*.version",
+                "/META-INF/proguard/*",
+                "/*.properties",
+                "/*.kt",
+                "/*.java",
+                "/assets/fonts/*"
             )
         }
     }
@@ -75,4 +82,8 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

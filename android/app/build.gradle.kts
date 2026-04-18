@@ -24,10 +24,19 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        
+
         ndk {
             abiFilters.add("armeabi-v7a")
             abiFilters.add("arm64-v8a")
+        }
+    }
+
+    signingConfigs {
+        create("release") {
+            storeFile = file("release-keystore.jks")
+            storePassword = System.getenv("RELEASE_STORE_PASSWORD") ?: "changeit"
+            keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "release"
+            keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: "changeit"
         }
     }
 
@@ -35,16 +44,16 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            
+
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            
-            signingConfig = signingConfigs.getByName("debug")
+
+            signingConfig = signingConfigs.getByName("release")
         }
     }
-    
+
     packaging {
         resources {
             excludes += listOf(
@@ -57,7 +66,7 @@ android {
             )
         }
     }
-    
+
     lint {
         disable += "InvalidPackage"
         checkReleaseBuilds = false

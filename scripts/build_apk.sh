@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# IM SDK Demo 打包脚本 - 优化版
+# Android APK 专用打包脚本 - 优化版
 # 参考 Light-1-Client 项目脚本结构
-# 用法: ./scripts/build.sh [ios|macos|android|apk] [--release|--debug] [options]
+# 用法: ./build_apk.sh [release|debug] [options]
 # 选项:
-#   --split-per-abi    按 ABI 拆分 APK (仅 Android)
-#   --arm-only         仅构建 ARM 平台 (仅 Android)
-#   --analyze-size     构建后分析 APK 体积 (仅 Android)
+#   --split-per-abi    按 ABI 拆分 APK (减小单包体积)
+#   --arm-only         仅构建 ARM 平台 (armeabi-v7a, arm64-v8a)
+#   --analyze-size     构建后分析 APK 体积
 #   --no-clean         不执行 flutter clean (加速构建)
-#   --no-codesign      不进行代码签名 (仅 iOS)
+#   --verbose          显示详细构建日志
 
 set -e
 
@@ -22,6 +22,11 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# 配置
+PROJECT_DIR="$(pwd)"
+BUILD_DIR="$PROJECT_DIR/build/app/outputs/flutter-apk"
+SYMBOLS_DIR="$PROJECT_DIR/build/app/outputs/symbols"
+
 # 设置 JAVA_HOME（使用 Android Studio 自带的 JDK）
 if [ -z "$JAVA_HOME" ]; then
     if [ -d "/Applications/Android Studio.app/Contents/jbr/Contents/Home" ]; then
@@ -34,21 +39,16 @@ if [ -z "$JAVA_HOME" ]; then
 fi
 
 # 默认值
-PLATFORM="${1:-ios}"
-BUILD_MODE="--release"
+BUILD_TYPE="release"
 SPLIT_ABI=""
 TARGET_PLATFORM=""
 ANALYZE_SIZE=false
 SKIP_CLEAN=false
-NO_CODESIGN=false
+VERBOSE=false
 
 # 解析参数
-shift  # 移除第一个参数 (platform)
 for arg in "$@"; do
     case "$arg" in
-        --release|--debug)
-            BUILD_MODE="$arg"
-            ;;
         --split-per-abi)
             SPLIT_ABI="--split-per-abi"
             ;;
@@ -61,8 +61,11 @@ for arg in "$@"; do
         --no-clean)
             SKIP_CLEAN=true
             ;;
-        --no-codesign)
-            NO_CODESIGN=true
+        --verbose)
+            VERBOSE=true
+            ;;
+        release|debug)
+            BUILD_TYPE="$arg"
             ;;
     esac
 done
@@ -71,25 +74,37 @@ done
 print_build_info() {
     echo ""
     echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE}  IM SDK Demo Build Configuration${NC}"
+    echo -e "${BLUE}  Android APK Build Configuration${NC}"
     echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
-    echo -e "  ${CYAN}Platform:${NC}    $PLATFORM"
-    echo -e "  ${CYAN}Mode:${NC}        $BUILD_MODE"
+    echo -e "  ${CYAN}Build Type:${NC}     $BUILD_TYPE"
     
-    if [ "$PLATFORM" = "apk" ] || [ "$PLATFORM" = "android" ]; then
-        if [ -n "$SPLIT_ABI" ]; then
-            echo -e "  ${CYAN}Split ABI:${NC}   Yes"
-        fi
-        if [ -n "$TARGET_PLATFORM" ]; then
-            echo -e "  ${CYAN}ARM Only:${NC}    Yes"
-        fi
-        if [ "$ANALYZE_SIZE" = true ]; then
-            echo -e "  ${CYAN}Analyze Size:${NC} Yes"
-        fi
+    if [ "$BUILD_TYPE" = "release" ]; then
+        echo -e "  ${CYAN}Obfuscation:${NC}    Enabled"
+        echo -e "  ${CYAN}Split Debug:${NC}    $SYMBOLS_DIR"
+    else
+        echo -e "  ${CYAN}Obfuscation:${NC}    Disabled (debug mode)"
+    fi
+    
+    if [ -n "$SPLIT_ABI" ]; then
+        echo -e "  ${CYAN}Split ABI:${NC}      Yes (separate APKs per architecture)"
+    else
+        echo -e "  ${CYAN}Split ABI:${NC}      No (universal APK)"
+    fi
+    
+    if [ -n "$TARGET_PLATFORM" ]; then
+        echo -e "  ${CYAN}Target Platform:${NC} ARM only (armeabi-v7a, arm64-v8a)"
+    else
+        echo -e "  ${CYAN}Target Platform:${NC} Default (all supported)"
     fi
     
     if [ "$SKIP_CLEAN" = true ]; then
-        echo -e "  ${CYAN}Clean:${NC}       Skipped"
+        echo -e "  ${CYAN}Clean Build:${NC}    Skipped (--no-clean)"
+    else
+        echo -e "  ${CYAN}Clean Build:${NC}    Enabled"
+    fi
+    
+    if [ "$ANALYZE_SIZE" = true ]; then
+        echo -e "  ${CYAN}Size Analysis:${NC}  Enabled"
     fi
     
     echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
@@ -98,7 +113,7 @@ print_build_info() {
 
 # 检查 Flutter 环境
 check_environment() {
-    echo -e "${CYAN}Checking Flutter environment...${NC}"
+    echo -e "${CYAN}[1/6] Checking Flutter environment...${NC}"
     
     if ! command -v flutter &> /dev/null; then
         echo -e "${RED}❌ 错误: Flutter 未安装或未在 PATH 中${NC}"
@@ -107,107 +122,88 @@ check_environment() {
     
     FLUTTER_VERSION=$(flutter --version | head -1)
     echo -e "${GREEN}✅ Flutter: $FLUTTER_VERSION${NC}"
+    
+    if command -v java &> /dev/null; then
+        JAVA_VERSION=$(java -version 2>&1 | head -1)
+        echo -e "${GREEN}✅ Java: $JAVA_VERSION${NC}"
+    fi
 }
 
 # 清理构建
 clean_build() {
     if [ "$SKIP_CLEAN" = true ]; then
-        echo -e "${YELLOW}Skipping flutter clean (--no-clean)${NC}"
+        echo -e "${YELLOW}[2/6] Skipping flutter clean (--no-clean)${NC}"
         return
     fi
     
-    echo -e "${CYAN}Cleaning previous build...${NC}"
+    echo -e "${CYAN}[2/6] Cleaning previous build...${NC}"
     flutter clean
     echo -e "${GREEN}✅ Clean complete${NC}"
 }
 
 # 获取依赖
 get_dependencies() {
-    echo -e "${CYAN}Getting dependencies...${NC}"
+    echo -e "${CYAN}[3/6] Getting dependencies...${NC}"
     flutter pub get
     echo -e "${GREEN}✅ Dependencies updated${NC}"
 }
 
-# 构建 iOS
-build_ios() {
-    echo -e "${CYAN}Building iOS...${NC}"
-    
-    EXTRA_ARGS=""
-    if [ "$NO_CODESIGN" = true ]; then
-        EXTRA_ARGS="--no-codesign"
-    fi
-    
-    flutter build ios $BUILD_MODE $EXTRA_ARGS
-    
-    echo ""
-    echo -e "${GREEN}✅ iOS build complete!${NC}"
-    echo -e "  Output: ${CYAN}build/ios/iphoneos/Runner.app${NC}"
-    echo ""
-    echo -e "To install on device, open Xcode:"
-    echo -e "  ${GREEN}open ios/Runner.xcworkspace${NC}"
-}
-
-# 构建 macOS
-build_macos() {
-    echo -e "${CYAN}Building macOS...${NC}"
-    
-    flutter build macos $BUILD_MODE
-    
-    echo ""
-    echo -e "${GREEN}✅ macOS build complete!${NC}"
-    echo -e "  Output: ${CYAN}build/macos/Build/Products/Release/im_sdk_demo.app${NC}"
-}
-
-# 构建 Android App Bundle
-build_android() {
-    echo -e "${CYAN}Building Android App Bundle...${NC}"
-    
-    flutter build appbundle $BUILD_MODE
-    
-    echo ""
-    echo -e "${GREEN}✅ Android App Bundle build complete!${NC}"
-    echo -e "  Output: ${CYAN}build/app/outputs/bundle/release/app-release.aab${NC}"
-}
-
-# 构建 Android APK
+# 构建 APK
 build_apk() {
-    echo -e "${CYAN}Building Android APK...${NC}"
+    echo -e "${CYAN}[4/6] Building Android APK ($BUILD_TYPE)...${NC}"
     
     EXTRA_ARGS=""
     
-    # 仅在 release 模式下启用混淆
-    if [ "$BUILD_MODE" = "--release" ]; then
-        EXTRA_ARGS="$EXTRA_ARGS --obfuscate --split-debug-info=build/app/outputs/symbols"
+    if [ "$BUILD_TYPE" = "release" ]; then
+        EXTRA_ARGS="$EXTRA_ARGS --obfuscate --split-debug-info=$SYMBOLS_DIR"
     fi
     
-    # 添加目标平台
     if [ -n "$TARGET_PLATFORM" ]; then
         EXTRA_ARGS="$EXTRA_ARGS $TARGET_PLATFORM"
     fi
     
-    # 添加体积分析
     if [ "$ANALYZE_SIZE" = true ]; then
         EXTRA_ARGS="$EXTRA_ARGS --analyze-size"
     fi
     
-    # 构建命令
-    BUILD_COMMAND="flutter build apk $BUILD_MODE"
+    BUILD_COMMAND="flutter build apk --$BUILD_TYPE"
+    
     if [ -n "$SPLIT_ABI" ]; then
         BUILD_COMMAND="$BUILD_COMMAND $SPLIT_ABI"
     fi
+    
     BUILD_COMMAND="$BUILD_COMMAND $EXTRA_ARGS"
     
     echo -e "${BLUE}  Command: $BUILD_COMMAND${NC}"
-    eval $BUILD_COMMAND
+    echo ""
     
+    if [ "$VERBOSE" = true ]; then
+        eval $BUILD_COMMAND
+    else
+        eval $BUILD_COMMAND 2>&1 | tail -20
+    fi
+    
+    BUILD_EXIT_CODE=${PIPESTATUS[0]}
+    
+    if [ $BUILD_EXIT_CODE -ne 0 ]; then
+        echo -e "${RED}❌ Build failed with exit code $BUILD_EXIT_CODE${NC}"
+        exit $BUILD_EXIT_CODE
+    fi
+    
+    echo -e "${GREEN}✅ Build complete${NC}"
+}
+
+# 显示构建结果
+show_results() {
     echo ""
     echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE}  APK Build Results${NC}"
+    echo -e "${BLUE}  Build Results${NC}"
     echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "${CYAN}Output files:${NC}"
+    echo -e "${CYAN}[5/6] Output files:${NC}"
+    echo -e "  Output directory: $BUILD_DIR"
+    echo ""
     
-    BUILD_DIR="build/app/outputs/flutter-apk"
     APK_COUNT=0
     TOTAL_SIZE=0
     
@@ -243,35 +239,60 @@ build_apk() {
     
     echo -e "${CYAN}  Total:${NC} $APK_COUNT APK(s), $TOTAL_HUMAN"
     echo ""
-    
-    echo -e "${CYAN}Installation:${NC}"
-    echo -e "  ${GREEN}flutter install${NC}"
+}
+
+# 显示安装指令
+show_install_instructions() {
+    echo -e "${CYAN}[6/6] Installation Instructions:${NC}"
+    echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
     echo ""
-    echo -e "Or using adb:"
+    
     if [ -n "$SPLIT_ABI" ]; then
-        MODE_NAME=$(echo $BUILD_MODE | sed 's/--//')
-        echo -e "  ${GREEN}adb install build/app/outputs/flutter-apk/app-armeabi-v7a-$MODE_NAME.apk${NC}"
-        echo -e "  ${GREEN}adb install build/app/outputs/flutter-apk/app-arm64-v8a-$MODE_NAME.apk${NC}"
+        echo -e "  ${YELLOW}Split ABI build detected${NC}"
+        echo ""
+        echo -e "  Install armeabi-v7a:"
+        echo -e "    ${GREEN}adb install $BUILD_DIR/app-armeabi-v7a-$BUILD_TYPE.apk${NC}"
+        echo ""
+        echo -e "  Install arm64-v8a:"
+        echo -e "    ${GREEN}adb install $BUILD_DIR/app-arm64-v8a-$BUILD_TYPE.apk${NC}"
     else
-        echo -e "  ${GREEN}adb install build/app/outputs/flutter-apk/app-$(echo $BUILD_MODE | sed 's/--//').apk${NC}"
+        echo -e "  Install universal APK:"
+        echo -e "    ${GREEN}adb install $BUILD_DIR/app-$BUILD_TYPE.apk${NC}"
+    fi
+    
+    echo ""
+    echo -e "  Or using Flutter:"
+    echo -e "    ${GREEN}flutter install${NC}"
+    echo ""
+    
+    if [ "$BUILD_TYPE" = "release" ] && [ -d "$SYMBOLS_DIR" ]; then
+        echo -e "${YELLOW}📊 Debug Symbols:${NC}"
+        echo -e "  Location: $SYMBOLS_DIR"
+        echo -e "  ${CYAN}Tip: Upload these symbols to Play Console for crash reporting${NC}"
+        echo ""
     fi
 }
 
-# 显示优化建议
+# 体积优化建议
 show_optimization_tips() {
-    if [ "$PLATFORM" = "apk" ] || [ "$PLATFORM" = "android" ]; then
-        echo ""
-        echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
-        echo -e "${BLUE}  Android Size Optimization Tips${NC}"
-        echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
-        echo ""
-        echo -e "${CYAN}🚀 For smallest APK size:${NC}"
-        echo -e "  1. Use --split-per-abi to create architecture-specific APKs"
-        echo -e "  2. Use --arm-only if you don't need x86 support"
-        echo -e "  3. Release build is always smaller than debug"
-        echo ""
-        echo -e "${CYAN}📦 Recommended command for production:${NC}"
-        echo -e "  ${GREEN}./scripts/build.sh apk --split-per-abi --arm-only --analyze-size${NC}"
+    echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}  Size Optimization Tips${NC}"
+    echo -e "${BLUE}════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
+    echo -e "${CYAN}🚀 For smallest APK size:${NC}"
+    echo -e "  1. Use --split-per-abi to create architecture-specific APKs"
+    echo -e "  2. Use --arm-only if you don't need x86 support"
+    echo -e "  3. Release build is always smaller than debug"
+    echo ""
+    
+    echo -e "${CYAN}📦 Recommended command for production:${NC}"
+    echo -e "  ${GREEN}./scripts/build_apk.sh release --split-per-abi --arm-only --analyze-size${NC}"
+    echo ""
+    
+    if [ "$ANALYZE_SIZE" = true ]; then
+        echo -e "${CYAN}📊 Size Analysis:${NC}"
+        echo -e "  Check the --analyze-size output above for detailed breakdown"
         echo ""
     fi
 }
@@ -281,45 +302,18 @@ main() {
     START_TIME=$(date +%s)
     
     print_build_info
+    
     check_environment
-    
-    if [ "$SKIP_CLEAN" != true ]; then
-        clean_build
-    fi
+    clean_build
     get_dependencies
-    
-    case "$PLATFORM" in
-        ios)
-            build_ios
-            ;;
-        macos)
-            build_macos
-            ;;
-        android)
-            build_android
-            ;;
-        apk)
-            build_apk
-            ;;
-        *)
-            echo -e "${RED}Usage: $0 [ios|macos|android|apk] [--release|--debug] [options]${NC}"
-            echo ""
-            echo -e "Examples:"
-            echo -e "  ${GREEN}$0 ios${NC}           # Build iOS release"
-            echo -e "  ${GREEN}$0 macos${NC}         # Build macOS release"
-            echo -e "  ${GREEN}$0 apk --debug${NC}   # Build Android debug APK"
-            echo -e "  ${GREEN}$0 apk --split-per-abi --arm-only${NC}  # Optimized APK for production"
-            echo ""
-            exit 1
-            ;;
-    esac
-    
+    build_apk
+    show_results
+    show_install_instructions
     show_optimization_tips
     
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
     
-    echo ""
     echo -e "${GREEN}════════════════════════════════════════════════════════${NC}"
     echo -e "${GREEN}  ✅ Build Completed Successfully!${NC}"
     echo -e "${GREEN}  ⏱️  Total time: ${DURATION}s${NC}"

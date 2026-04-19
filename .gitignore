@@ -44,3 +44,4 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .claude/
+build_output/1/android/app-debug.apk

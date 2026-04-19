@@ -153,6 +153,8 @@ class _AttachmentPanelState extends State<AttachmentPanel> {
                 widget.onAttachmentSelected(AttachmentType.file, file),
             onError: _showError,
           );
+        case AttachmentType.voice:
+          break;
       }
     } finally {
       if (mounted) {

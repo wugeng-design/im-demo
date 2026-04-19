@@ -323,6 +323,13 @@ class ReplyMessageBubble extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: textStyle,
         );
+      case MessageType.audio:
+        return Text(
+          '${replyInfo.senderName}：[语音]',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: textStyle,
+        );
       case MessageType.system:
         return Text(
           '${replyInfo.senderName}：[系统消息]',

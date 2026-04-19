@@ -8,6 +8,9 @@ enum MediaType {
 
   /// 文件
   file,
+
+  /// 音频
+  audio,
 }
 
 /// 媒体元数据

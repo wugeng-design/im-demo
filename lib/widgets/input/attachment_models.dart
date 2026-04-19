@@ -18,6 +18,9 @@ enum AttachmentType {
 
   /// 文件
   file,
+
+  /// 语音
+  voice,
 }
 
 /// 附件选择回调（单文件）

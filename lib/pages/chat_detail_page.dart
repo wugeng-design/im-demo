@@ -9,6 +9,7 @@ import 'package:open_file/open_file.dart';
 import '../providers/im_provider.dart';
 import '../sdk/models/message.dart';
 import '../sdk/models/media.dart';
+import '../sdk/services/voice_recorder_service.dart';
 import '../theme/im_design_tokens.dart';
 import '../widgets/message_bubbles/message_bubbles.dart';
 import '../widgets/input/input.dart';
@@ -385,7 +386,26 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     _sendMediaMessage(file, MediaType.file);
   }
 
-  Future<void> _sendMediaMessage(File file, MediaType type) async {
+  void _onVoiceRecordingComplete(RecordingResult result) {
+    if (!result.isSuccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('录音失败: ${result.error}')),
+      );
+      return;
+    }
+
+    if (result.path == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('录音文件不存在')),
+      );
+      return;
+    }
+
+    final file = File(result.path!);
+    _sendMediaMessage(file, MediaType.audio, duration: result.duration);
+  }
+
+  Future<void> _sendMediaMessage(File file, MediaType type, {Duration? duration}) async {
     final service = ref.read(imConnectionServiceProvider);
     final repository = ref.read(repositoryProvider);
     final uploadService = ref.read(mediaUploadServiceProvider);
@@ -405,6 +425,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       fileName: fileName,
       mimeType: mimeType,
       fileSize: fileSize,
+      duration: duration != null ? duration.inSeconds : null,
     );
 
     // 确定消息类型
@@ -412,6 +433,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       MediaType.image => MessageType.image,
       MediaType.video => MessageType.video,
       MediaType.file => MessageType.file,
+      MediaType.audio => MessageType.audio,
     };
 
     final messageId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -455,6 +477,14 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
             },
           ),
         MediaType.file => uploadService.uploadFile(
+            messageId: messageId,
+            file: file,
+            mimeType: mimeType,
+            onProgress: (progress) {
+              ref.read(uploadProgressProvider.notifier).updateProgress(messageId, progress);
+            },
+          ),
+        MediaType.audio => uploadService.uploadAudio(
             messageId: messageId,
             file: file,
             mimeType: mimeType,
@@ -529,6 +559,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       MediaType.image => 'IMG',
       MediaType.video => 'VIDEO',
       MediaType.file => 'FILE',
+      MediaType.audio => 'AUDIO',
     };
     return '[$typeTag:$fileName]$url';
   }
@@ -550,6 +581,12 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'zip' => 'application/zip',
       'rar' => 'application/x-rar-compressed',
+      'm4a' => 'audio/mp4',
+      'aac' => 'audio/aac',
+      'wav' => 'audio/wav',
+      'flac' => 'audio/flac',
+      'mp3' => 'audio/mpeg',
+      'opus' => 'audio/opus',
       _ => 'application/octet-stream',
     };
   }
@@ -559,6 +596,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       MediaType.image => '[图片]',
       MediaType.video => '[视频]',
       MediaType.file => '[文件] $fileName',
+      MediaType.audio => '[语音]',
     };
   }
 
@@ -797,6 +835,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         return '[视频]';
       case MessageType.file:
         return '[文件] ${message.media?.fileName ?? ''}';
+      case MessageType.audio:
+        return '[语音]';
       case MessageType.system:
         return '[系统消息]';
       default:
@@ -841,6 +881,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onMultipleImagesSelected: _onMultipleImagesSelected,
               onVideoSelected: _onVideoSelected,
               onFileSelected: _onFileSelected,
+              onVoiceRecordingComplete: _onVoiceRecordingComplete,
               mentionableMembers: widget.isGroup ? _mentionableMembers : null,
             ),
           ]
@@ -855,6 +896,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onMultipleImagesSelected: _onMultipleImagesSelected,
               onVideoSelected: _onVideoSelected,
               onFileSelected: _onFileSelected,
+              onVoiceRecordingComplete: _onVoiceRecordingComplete,
               mentionableMembers: widget.isGroup ? _mentionableMembers : null,
             )
           else
@@ -1227,6 +1269,19 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           onRetry: onRetry,
         );
 
+      case MessageType.audio:
+        final audioUrl = message.media?.remoteUrl ?? _extractMediaUrl(message.body);
+        bubble = AudioMessageBubble(
+          messageId: message.id,
+          isSentByMe: message.isMe,
+          audioUrl: audioUrl,
+          localFilePath: message.media?.localFilePath,
+          duration: message.media?.duration != null
+              ? Duration(seconds: message.media!.duration!)
+              : null,
+          onTap: _isSelectionMode ? null : () {},
+        );
+
       case MessageType.system:
         // 系统消息不参与多选
         if (message.body.contains('撤回了一条消息')) {
@@ -1445,13 +1500,13 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   ///
   /// 支持两种格式:
   /// - 直接 URL: http://...
-  /// - 带标签格式: [IMG:filename]http://... 或 [VIDEO:filename]http://...
+  /// - 带标签格式: [IMG:filename]http://... 或 [VIDEO:filename]http://... 或 [AUDIO:filename]http://...
   String? _extractMediaUrl(String body) {
     if (body.startsWith('http://') || body.startsWith('https://')) {
       return body;
     }
     // 匹配 [TYPE:filename]url 格式
-    final regex = RegExp(r'^\[(IMG|VIDEO|FILE):[^\]]+\](.+)$');
+    final regex = RegExp(r'^\[(IMG|VIDEO|FILE|AUDIO):[^\]]+\](.+)$');
     final match = regex.firstMatch(body);
     if (match != null) {
       return match.group(2);

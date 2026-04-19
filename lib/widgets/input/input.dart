@@ -6,6 +6,9 @@ export 'attachment_picker.dart';
 export 'attachment_panel.dart';
 export 'message_input_area.dart';
 
+// 语音输入
+export 'voice_input_button.dart';
+
 // 表情面板
 export 'emoji_panel.dart';
 

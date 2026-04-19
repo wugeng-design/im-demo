@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../../sdk/services/voice_recorder_service.dart';
 import '../../theme/im_design_tokens.dart';
 import 'attachment_models.dart';
 import 'attachment_panel.dart';
@@ -9,6 +10,12 @@ import 'emoji_panel.dart';
 import 'mention_models.dart';
 import 'mention_overlay.dart';
 import 'mention_utils.dart';
+import 'voice_input_button.dart';
+
+enum InputMode {
+  text,
+  voice,
+}
 
 /// 消息输入区域
 class MessageInputArea extends StatefulWidget {
@@ -22,6 +29,7 @@ class MessageInputArea extends StatefulWidget {
     this.onMultipleImagesSelected,
     this.onVideoSelected,
     this.onFileSelected,
+    this.onVoiceRecordingComplete,
     this.mentionableMembers,
   });
 
@@ -49,6 +57,9 @@ class MessageInputArea extends StatefulWidget {
   /// 文件选择回调
   final void Function(File file)? onFileSelected;
 
+  /// 语音录制完成回调
+  final void Function(RecordingResult result)? onVoiceRecordingComplete;
+
   /// 可提及的成员列表（群聊时传入）
   final List<MentionableMember>? mentionableMembers;
 
@@ -62,6 +73,8 @@ class MessageInputAreaState extends State<MessageInputArea> {
   bool _showAttachmentPanel = false;
   bool _showEmojiPanel = false;
   bool _hasText = false;
+  InputMode _inputMode = InputMode.text;
+  RecordingState _recordingState = RecordingState.idle;
 
   /// @提及检测结果
   MentionDetectionResult _mentionDetection = MentionDetectionResult.empty;
@@ -84,6 +97,10 @@ class MessageInputAreaState extends State<MessageInputArea> {
   void focus() {
     _focusNode.requestFocus();
   }
+
+  /// 是否正在录音
+  bool get isRecording => _recordingState == RecordingState.recording ||
+      _recordingState == RecordingState.preparing;
 
   @override
   void initState() {
@@ -109,7 +126,6 @@ class MessageInputAreaState extends State<MessageInputArea> {
     }
     widget.onTextChanged?.call(_textController.text);
 
-    // 检测 @提及
     if (widget.mentionableMembers != null && widget.mentionableMembers!.isNotEmpty) {
       final newDetection = detectMention(
         _textController.text,
@@ -124,6 +140,29 @@ class MessageInputAreaState extends State<MessageInputArea> {
     }
   }
 
+  void _toggleInputMode() {
+    setState(() {
+      _inputMode = _inputMode == InputMode.text ? InputMode.voice : InputMode.text;
+      if (_inputMode == InputMode.text) {
+        _focusNode.requestFocus();
+      } else {
+        _focusNode.unfocus();
+        _showAttachmentPanel = false;
+        _showEmojiPanel = false;
+      }
+    });
+  }
+
+  void _onRecordingStateChanged(RecordingState state) {
+    setState(() {
+      _recordingState = state;
+    });
+  }
+
+  void _onRecordingComplete(RecordingResult result) {
+    widget.onVoiceRecordingComplete?.call(result);
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = ImDesignTokens.colorSchemeOf(context);
@@ -132,14 +171,12 @@ class MessageInputAreaState extends State<MessageInputArea> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // @提及选择面板
         if (_mentionDetection.isActive && widget.mentionableMembers != null)
           MentionOverlay(
             members: widget.mentionableMembers!,
             query: _mentionDetection.query,
             onMemberSelected: _onMentionMemberSelected,
           ),
-        // 输入栏
         Container(
           decoration: BoxDecoration(
             color: colors.surface,
@@ -153,55 +190,14 @@ class MessageInputAreaState extends State<MessageInputArea> {
             top: 8,
             bottom: (_showAttachmentPanel || _showEmojiPanel) ? 8 : bottomPadding + 8,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Emoji 按钮
-              IconButton(
-                icon: Icon(
-                  _showEmojiPanel ? Icons.keyboard_outlined : Icons.emoji_emotions_outlined,
-                  color: _showEmojiPanel ? colors.primary : colors.textSecondary,
-                ),
-                onPressed: _toggleEmojiPanel,
-              ),
-              // 输入框
-              Expanded(
-                child: Container(
-                  constraints: const BoxConstraints(maxHeight: 120),
-                  decoration: BoxDecoration(
-                    color: colors.surfaceVariant,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: TextField(
-                    controller: _textController,
-                    focusNode: _focusNode,
-                    maxLines: null,
-                    textInputAction: TextInputAction.newline,
-                    decoration: InputDecoration(
-                      hintText: '输入消息...',
-                      hintStyle: TextStyle(color: colors.textTertiary),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      border: InputBorder.none,
-                    ),
-                    onTap: _hidePanels,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // 发送按钮 或 附件按钮
-              _buildSendOrAttachmentButton(colors),
-            ],
-          ),
+          child: _inputMode == InputMode.voice
+              ? _buildVoiceInputRow(colors)
+              : _buildTextInputRow(colors),
         ),
-        // Emoji 面板
         if (_showEmojiPanel)
           EmojiPanel(
             onEmojiSelected: _onEmojiSelected,
           ),
-        // 附件面板
         if (_showAttachmentPanel)
           AttachmentPanel(
             onAttachmentSelected: _onAttachmentSelected,
@@ -213,7 +209,83 @@ class MessageInputAreaState extends State<MessageInputArea> {
     );
   }
 
-  /// 构建发送按钮或附件按钮（根据输入内容切换）
+  Widget _buildTextInputRow(ImColorScheme colors) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        IconButton(
+          icon: Icon(
+            _inputMode == InputMode.voice ? Icons.keyboard_outlined : Icons.mic_none,
+            color: _inputMode == InputMode.voice ? colors.primary : colors.textSecondary,
+          ),
+          onPressed: _toggleInputMode,
+        ),
+        IconButton(
+          icon: Icon(
+            _showEmojiPanel ? Icons.keyboard_outlined : Icons.emoji_emotions_outlined,
+            color: _showEmojiPanel ? colors.primary : colors.textSecondary,
+          ),
+          onPressed: _toggleEmojiPanel,
+        ),
+        Expanded(
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 120),
+            decoration: BoxDecoration(
+              color: colors.surfaceVariant,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: TextField(
+              controller: _textController,
+              focusNode: _focusNode,
+              maxLines: null,
+              textInputAction: TextInputAction.newline,
+              decoration: InputDecoration(
+                hintText: '输入消息...',
+                hintStyle: TextStyle(color: colors.textTertiary),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                border: InputBorder.none,
+              ),
+              onTap: _hidePanels,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildSendOrAttachmentButton(colors),
+      ],
+    );
+  }
+
+  Widget _buildVoiceInputRow(ImColorScheme colors) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        IconButton(
+          icon: Icon(
+            _inputMode == InputMode.voice ? Icons.keyboard_outlined : Icons.mic_none,
+            color: _inputMode == InputMode.voice ? colors.primary : colors.textSecondary,
+          ),
+          onPressed: _toggleInputMode,
+        ),
+        Expanded(
+          child: VoiceInputButton(
+            onRecordingComplete: _onRecordingComplete,
+            onRecordingStateChanged: _onRecordingStateChanged,
+          ),
+        ),
+        IconButton(
+          icon: Icon(
+            _showAttachmentPanel ? Icons.close : Icons.add_circle_outline,
+            color: _showAttachmentPanel ? colors.primary : colors.textSecondary,
+          ),
+          onPressed: _toggleAttachmentPanel,
+        ),
+      ],
+    );
+  }
+
   Widget _buildSendOrAttachmentButton(ImColorScheme colors) {
     if (_hasText) {
       return _buildSendButton(colors);
@@ -285,12 +357,10 @@ class MessageInputAreaState extends State<MessageInputArea> {
     }
   }
 
-  /// 处理 @提及成员选择
   void _onMentionMemberSelected(MentionableMember member) {
     final text = _textController.text;
     final cursorPosition = _textController.selection.baseOffset;
 
-    // 替换 @query 为 @[nickname](userBareJid)
     final newText = replaceMention(
       text,
       _mentionDetection.startIndex,
@@ -300,26 +370,21 @@ class MessageInputAreaState extends State<MessageInputArea> {
 
     _textController.text = newText;
 
-    // 将光标移动到插入的提及之后
     final newCursorPosition = _mentionDetection.startIndex +
         '@[${member.nickname}](${member.userBareJid}) '.length;
     _textController.selection = TextSelection.collapsed(offset: newCursorPosition);
 
-    // 清除提及检测状态
     setState(() {
       _mentionDetection = MentionDetectionResult.empty;
     });
 
-    // 重新获取焦点
     _focusNode.requestFocus();
   }
 
-  /// 插入 Emoji 到当前光标位置
   void _onEmojiSelected(String emoji) {
     final text = _textController.text;
     final selection = _textController.selection;
 
-    // 如果没有有效选择，在末尾插入
     if (!selection.isValid) {
       _textController.text = '$text$emoji';
       _textController.selection = TextSelection.collapsed(
@@ -328,7 +393,6 @@ class MessageInputAreaState extends State<MessageInputArea> {
       return;
     }
 
-    // 在选择位置插入 emoji（替换选中内容）
     final newText = text.replaceRange(selection.start, selection.end, emoji);
     _textController.text = newText;
     _textController.selection = TextSelection.collapsed(
@@ -345,7 +409,6 @@ class MessageInputAreaState extends State<MessageInputArea> {
   }
 
   void _onAttachmentSelected(AttachmentType type, File? file) {
-    // 关闭面板
     setState(() => _showAttachmentPanel = false);
 
     if (file == null) return;
@@ -359,6 +422,8 @@ class MessageInputAreaState extends State<MessageInputArea> {
         widget.onVideoSelected?.call(file);
       case AttachmentType.file:
         widget.onFileSelected?.call(file);
+      case AttachmentType.voice:
+        break;
     }
   }
 

@@ -86,6 +86,19 @@ abstract class MediaUploadService {
     UploadProgressCallback? onProgress,
   });
 
+  /// 上传音频
+  ///
+  /// [messageId] 消息 ID
+  /// [file] 音频文件
+  /// [mimeType] MIME 类型
+  /// [onProgress] 进度回调
+  Future<MediaUploadResult> uploadAudio({
+    required String messageId,
+    required File file,
+    required String mimeType,
+    UploadProgressCallback? onProgress,
+  });
+
   /// 取消上传
   ///
   /// [messageId] 消息 ID
@@ -149,6 +162,21 @@ class MockMediaUploadService implements MediaUploadService {
       messageId: messageId,
       file: file,
       type: MediaType.file,
+      onProgress: onProgress,
+    );
+  }
+
+  @override
+  Future<MediaUploadResult> uploadAudio({
+    required String messageId,
+    required File file,
+    required String mimeType,
+    UploadProgressCallback? onProgress,
+  }) async {
+    return _simulateUpload(
+      messageId: messageId,
+      file: file,
+      type: MediaType.audio,
       onProgress: onProgress,
     );
   }

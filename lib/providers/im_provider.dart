@@ -324,6 +324,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       MessageType.image => '[图片]',
       MessageType.video => '[视频]',
       MessageType.file => '[文件]',
+      MessageType.audio => '[语音]',
       _ => body,
     };
 
@@ -402,8 +403,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
   ///
   /// 返回解析结果，如果不是媒体消息则返回 null
   _ParsedMediaMessage? _parseMediaMessage(String body) {
-    // 匹配格式: [IMG:filename]url 或 [VIDEO:filename]url 或 [FILE:filename]url
-    final regex = RegExp(r'^\[(IMG|VIDEO|FILE):([^\]]+)\](.+)$');
+    // 匹配格式: [IMG:filename]url 或 [VIDEO:filename]url 或 [FILE:filename]url 或 [AUDIO:filename]url
+    final regex = RegExp(r'^\[(IMG|VIDEO|FILE|AUDIO):([^\]]+)\](.+)$');
     final match = regex.firstMatch(body);
 
     if (match == null) return null;
@@ -416,6 +417,7 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       'IMG' => MessageType.image,
       'VIDEO' => MessageType.video,
       'FILE' => MessageType.file,
+      'AUDIO' => MessageType.audio,
       _ => MessageType.text,
     };
 
@@ -926,6 +928,8 @@ class MessageForwarder {
         return '[视频]';
       case MessageType.file:
         return '[文件]';
+      case MessageType.audio:
+        return '[语音]';
       default:
         return body.length > 50 ? '${body.substring(0, 50)}...' : body;
     }
@@ -1021,6 +1025,16 @@ class _PlaceholderUploadService implements MediaUploadService {
 
   @override
   Future<MediaUploadResult> uploadFile({
+    required String messageId,
+    required File file,
+    required String mimeType,
+    UploadProgressCallback? onProgress,
+  }) async {
+    return MediaUploadResult.failure('未连接到服务器');
+  }
+
+  @override
+  Future<MediaUploadResult> uploadAudio({
     required String messageId,
     required File file,
     required String mimeType,

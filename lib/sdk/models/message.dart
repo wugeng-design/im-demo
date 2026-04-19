@@ -9,6 +9,7 @@ enum MessageType {
   video,
   file,
   system,
+  audio,
 }
 
 /// 回复消息信息
@@ -87,6 +88,8 @@ class ReplyInfo {
         return '[视频]';
       case MessageType.file:
         return fileName != null ? '[文件] $fileName' : '[文件]';
+      case MessageType.audio:
+        return '[语音]';
       case MessageType.system:
         return body;
       case MessageType.text:
@@ -131,7 +134,8 @@ class Message {
   bool get isMediaMessage =>
       messageType == MessageType.image ||
       messageType == MessageType.video ||
-      messageType == MessageType.file;
+      messageType == MessageType.file ||
+      messageType == MessageType.audio;
 
   /// 获取显示文本（媒体消息显示类型描述）
   String get displayBody {
@@ -142,6 +146,8 @@ class Message {
         return '[视频]';
       case MessageType.file:
         return '[文件] ${media?.fileName ?? ''}';
+      case MessageType.audio:
+        return '[语音]';
       case MessageType.system:
         return body;
       case MessageType.text:

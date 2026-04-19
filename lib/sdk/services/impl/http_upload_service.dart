@@ -68,6 +68,22 @@ class HttpUploadService implements MediaUploadService {
     );
   }
 
+  @override
+  Future<MediaUploadResult> uploadAudio({
+    required String messageId,
+    required File file,
+    required String mimeType,
+    UploadProgressCallback? onProgress,
+  }) async {
+    return _uploadFile(
+      messageId: messageId,
+      file: file,
+      type: MediaType.audio,
+      mimeType: mimeType,
+      onProgress: onProgress,
+    );
+  }
+
   Future<MediaUploadResult> _uploadFile({
     required String messageId,
     required File file,

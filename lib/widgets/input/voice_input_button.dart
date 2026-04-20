@@ -103,7 +103,7 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              _startRecordingWithPermission();
+              _startRecording();
             },
             child: const Text('确定'),
           ),
@@ -136,25 +136,6 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
   }
 
   Future<void> _startRecording() async {
-    final status = await _checkPermission();
-    
-    if (!mounted) return;
-    
-    debugPrint('[VoiceInputButton] 权限状态: $status');
-    debugPrint('[VoiceInputButton] isGranted: ${status.isGranted}');
-    debugPrint('[VoiceInputButton] isDenied: ${status.isDenied}');
-    debugPrint('[VoiceInputButton] isPermanentlyDenied: ${status.isPermanentlyDenied}');
-    
-    if (status.isGranted) {
-      _startRecordingWithPermission();
-    } else if (status.isPermanentlyDenied) {
-      _showPermissionDeniedDialog();
-    } else {
-      _showPermissionRationaleDialog();
-    }
-  }
-
-  Future<void> _startRecordingWithPermission() async {
     final recorder = ref.read(voiceRecorderServiceProvider);
     _setupSubscriptions(recorder);
 
@@ -169,12 +150,11 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
     if (!success && mounted) {
       final status = await _checkPermission();
       if (mounted) {
+        debugPrint('[VoiceInputButton] 录音失败，权限状态: $status');
         if (status.isPermanentlyDenied) {
           _showPermissionDeniedDialog();
         } else if (!status.isGranted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('需要麦克风权限才能录制语音')),
-          );
+          _showPermissionRationaleDialog();
         }
       }
     }
@@ -220,31 +200,12 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
     );
   }
 
-  void _handleTapDown(TapDownDetails details) {
+  void _handlePanDown(DragDownDetails details) {
     _dragStartOffset = details.globalPosition;
     _startRecording();
   }
 
-  void _handleTapUp(TapUpDetails details) {
-    if (_isCancelling) {
-      _cancelRecording();
-    } else {
-      _stopRecording();
-    }
-    _dragStartOffset = null;
-  }
-
-  void _handleTapCancel() {
-    _cancelRecording();
-    _dragStartOffset = null;
-  }
-
-  void _handleLongPressStart(LongPressStartDetails details) {
-    _dragStartOffset = details.globalPosition;
-    _startRecording();
-  }
-
-  void _handleLongPressEnd(LongPressEndDetails details) {
+  void _handlePanEnd(DragEndDetails details) {
     if (_isCancelling) {
       _cancelRecording();
     } else {
@@ -286,11 +247,8 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
         _recordingState == RecordingState.preparing;
 
     return GestureDetector(
-      onTapDown: _handleTapDown,
-      onTapUp: _handleTapUp,
-      onTapCancel: _handleTapCancel,
-      onLongPressStart: _handleLongPressStart,
-      onLongPressEnd: _handleLongPressEnd,
+      onPanDown: _handlePanDown,
+      onPanEnd: _handlePanEnd,
       onPanUpdate: _handlePanUpdate,
       child: Container(
         height: 50,

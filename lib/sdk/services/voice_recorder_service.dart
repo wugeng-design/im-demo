@@ -175,25 +175,27 @@ class VoiceRecorderService {
   }
 
   /// 检查麦克风权限
-  Future<bool> checkPermission() async {
+  Future<PermissionStatus> checkPermission() async {
     final status = await Permission.microphone.status;
     debugPrint('[VoiceRecorder] 麦克风权限状态: $status');
-    return status.isGranted;
+    return status;
   }
 
   /// 请求麦克风权限
-  Future<bool> requestPermission() async {
+  Future<PermissionStatus> requestPermission() async {
     final status = await Permission.microphone.request();
     debugPrint('[VoiceRecorder] 请求麦克风权限结果: $status');
-    return status.isGranted;
+    return status;
   }
 
   /// 检查并请求权限
-  Future<bool> ensurePermission() async {
-    final hasPermission = await checkPermission();
-    if (hasPermission) return true;
+  Future<PermissionStatus> ensurePermission() async {
+    final status = await checkPermission();
+    if (status.isGranted) return status;
     return await requestPermission();
   }
+
+
 
   /// 生成录音文件路径
   Future<String> _generateFilePath(RecordingConfig config) async {
@@ -218,13 +220,6 @@ class VoiceRecorderService {
     _updateState(RecordingState.preparing);
 
     try {
-      final hasPermission = await ensurePermission();
-      if (!hasPermission) {
-        _updateState(RecordingState.error);
-        debugPrint('[VoiceRecorder] 没有麦克风权限');
-        return false;
-      }
-
       final path = await _generateFilePath(config);
       debugPrint('[VoiceRecorder] 准备录音到: $path');
 

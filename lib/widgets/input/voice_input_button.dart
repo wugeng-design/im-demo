@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../sdk/services/voice_recorder_service.dart';
 import '../../theme/im_design_tokens.dart';
@@ -29,7 +30,6 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
   List<double> _waveform = [];
   Offset? _dragStartOffset;
   bool _isCancelling = false;
-  String? _errorMessage;
   StreamSubscription<AmplitudeData>? _amplitudeSubscription;
   StreamSubscription<Duration>? _durationSubscription;
   StreamSubscription<RecordingState>? _stateSubscription;
@@ -83,24 +83,78 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
     });
   }
 
-  Future<bool> _checkPermission() async {
-    final recorder = ref.read(voiceRecorderServiceProvider);
-    final hasPermission = await recorder.checkPermission();
-    if (!hasPermission) {
-      return await recorder.requestPermission();
-    }
-    return true;
+  Future<PermissionStatus> _checkPermission() async {
+    final status = await Permission.microphone.status;
+    debugPrint('[VoiceInputButton] 检查麦克风权限状态: $status');
+    return status;
+  }
+
+  void _showPermissionRationaleDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('需要麦克风权限'),
+        content: const Text('为了录制语音消息发送给好友，需要访问您的麦克风。\n\n点击"确定"后，系统会弹出权限请求对话框，请选择"允许"。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              _startRecordingWithPermission();
+            },
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPermissionDeniedDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('需要麦克风权限'),
+        content: const Text('麦克风权限被拒绝。\n\n如果您之前拒绝过权限，需要在设置中开启：\n设置 → 隐私与安全 → 麦克风 → 畅聊天下\n\n如果设置中没有麦克风选项，请尝试：\n1. 完全卸载应用\n2. 重启设备\n3. 重新安装应用'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+            child: const Text('去设置'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _startRecording() async {
-    final hasPermission = await _checkPermission();
-    if (!hasPermission) {
-      setState(() {
-        _errorMessage = '需要麦克风权限才能录制语音';
-      });
-      return;
+    final status = await _checkPermission();
+    
+    if (!mounted) return;
+    
+    debugPrint('[VoiceInputButton] 权限状态: $status');
+    debugPrint('[VoiceInputButton] isGranted: ${status.isGranted}');
+    debugPrint('[VoiceInputButton] isDenied: ${status.isDenied}');
+    debugPrint('[VoiceInputButton] isPermanentlyDenied: ${status.isPermanentlyDenied}');
+    
+    if (status.isGranted) {
+      _startRecordingWithPermission();
+    } else if (status.isPermanentlyDenied) {
+      _showPermissionDeniedDialog();
+    } else {
+      _showPermissionRationaleDialog();
     }
+  }
 
+  Future<void> _startRecordingWithPermission() async {
     final recorder = ref.read(voiceRecorderServiceProvider);
     _setupSubscriptions(recorder);
 
@@ -108,10 +162,22 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
       _waveform = [];
       _currentDuration = Duration.zero;
       _isCancelling = false;
-      _errorMessage = null;
     });
 
-    await recorder.startRecording();
+    final success = await recorder.startRecording();
+    
+    if (!success && mounted) {
+      final status = await _checkPermission();
+      if (mounted) {
+        if (status.isPermanentlyDenied) {
+          _showPermissionDeniedDialog();
+        } else if (!status.isGranted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('需要麦克风权限才能录制语音')),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _stopRecording() async {
@@ -125,10 +191,6 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
       } else {
         widget.onRecordingComplete(result);
       }
-    } else if (result.error != null) {
-      setState(() {
-        _errorMessage = result.error;
-      });
     }
 
     _cancelSubscriptions();
@@ -158,9 +220,37 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
     );
   }
 
-  void _handlePanStart(DragStartDetails details) {
+  void _handleTapDown(TapDownDetails details) {
     _dragStartOffset = details.globalPosition;
     _startRecording();
+  }
+
+  void _handleTapUp(TapUpDetails details) {
+    if (_isCancelling) {
+      _cancelRecording();
+    } else {
+      _stopRecording();
+    }
+    _dragStartOffset = null;
+  }
+
+  void _handleTapCancel() {
+    _cancelRecording();
+    _dragStartOffset = null;
+  }
+
+  void _handleLongPressStart(LongPressStartDetails details) {
+    _dragStartOffset = details.globalPosition;
+    _startRecording();
+  }
+
+  void _handleLongPressEnd(LongPressEndDetails details) {
+    if (_isCancelling) {
+      _cancelRecording();
+    } else {
+      _stopRecording();
+    }
+    _dragStartOffset = null;
   }
 
   void _handlePanUpdate(DragUpdateDetails details) {
@@ -174,15 +264,6 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
         _isCancelling = isCancelling;
       });
     }
-  }
-
-  void _handlePanEnd(DragEndDetails details) {
-    if (_isCancelling) {
-      _cancelRecording();
-    } else {
-      _stopRecording();
-    }
-    _dragStartOffset = null;
   }
 
   @override
@@ -205,9 +286,12 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
         _recordingState == RecordingState.preparing;
 
     return GestureDetector(
-      onPanStart: _handlePanStart,
+      onTapDown: _handleTapDown,
+      onTapUp: _handleTapUp,
+      onTapCancel: _handleTapCancel,
+      onLongPressStart: _handleLongPressStart,
+      onLongPressEnd: _handleLongPressEnd,
       onPanUpdate: _handlePanUpdate,
-      onPanEnd: _handlePanEnd,
       child: Container(
         height: 50,
         decoration: BoxDecoration(

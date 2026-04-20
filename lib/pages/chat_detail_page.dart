@@ -1279,7 +1279,14 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           duration: message.media?.duration != null
               ? Duration(seconds: message.media!.duration!)
               : null,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          senderAvatar: message.senderAvatar,
+          showSenderName: widget.isGroup && !message.isMe,
+          showAvatar: true,
+          status: status,
           onTap: _isSelectionMode ? null : () {},
+          onLongPress: () => onLongPress(TapDownDetails(globalPosition: Offset.zero)),
         );
 
       case MessageType.system:

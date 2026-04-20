@@ -23,6 +23,9 @@ import 'package:http/http.dart' as http;
 import '../../providers/audio_playback_provider.dart';
 import '../../theme/im_design_tokens.dart';
 import '../../theme/message_styles.dart';
+import '../im_avatar.dart';
+import '../message_status_widget.dart';
+import 'message_bubble.dart'; // 导入消息状态枚举
 
 /// 语音消息气泡
 ///
@@ -42,6 +45,14 @@ class AudioMessageBubble extends ConsumerStatefulWidget {
     this.duration,
     this.cacheKey,
     this.onTap,
+    this.senderId,
+    this.senderName,
+    this.senderAvatar,
+    this.showSenderName = false,
+    this.showAvatar = false,
+    this.status,
+    this.onAvatarTap,
+    this.onLongPress,
   });
 
   /// 消息 ID
@@ -64,6 +75,30 @@ class AudioMessageBubble extends ConsumerStatefulWidget {
 
   /// 点击回调
   final VoidCallback? onTap;
+
+  /// 发送者 ID（用于头像占位符颜色）
+  final String? senderId;
+
+  /// 发送者名称（群聊时显示）
+  final String? senderName;
+
+  /// 发送者头像 URL
+  final String? senderAvatar;
+
+  /// 是否显示发送者名称
+  final bool showSenderName;
+
+  /// 是否显示头像
+  final bool showAvatar;
+
+  /// 消息状态
+  final MessageDisplayStatus? status;
+
+  /// 头像点击回调
+  final VoidCallback? onAvatarTap;
+
+  /// 长按回调
+  final VoidCallback? onLongPress;
 
   @override
   ConsumerState<AudioMessageBubble> createState() => _AudioMessageBubbleState();
@@ -268,45 +303,122 @@ class _AudioMessageBubbleState extends ConsumerState<AudioMessageBubble> {
         ? _formatDuration(playbackState.duration - playbackState.position)
         : _formatDuration(widget.duration ?? Duration.zero);
 
-    return GestureDetector(
-      onTap: () => _onTap(),
-      child: Container(
-        constraints: const BoxConstraints(minWidth: 120, maxWidth: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: widget.isSentByMe
-              ? colors.messageBubbleSent
-              : colors.messageBubbleReceived,
-          borderRadius: widget.isSentByMe
-              ? MessageStyles.bubbleRadiusSent
-              : MessageStyles.bubbleRadiusReceived,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 声波图标/下载进度（发送的在右边，接收的在左边）
-            if (!widget.isSentByMe) ...[
-              _buildLeftIcon(colors, isThisPlaying),
-              const SizedBox(width: 8),
-            ],
-            // 时长显示
-            Text(
-              displayDuration,
-              style: TextStyle(
-                fontSize: 14,
-                color: colors.textPrimary,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment:
+            widget.isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 左侧头像（接收的消息）
+          if (widget.showAvatar && !widget.isSentByMe) ...[
+            GestureDetector(
+              onTap: widget.onAvatarTap,
+              child: ImAvatar.small(
+                userId: widget.senderId ?? '',
+                name: widget.senderName,
+                avatarUrl: widget.senderAvatar,
               ),
             ),
-            // 声波图标（发送的在右边）
-            if (widget.isSentByMe) ...[
-              const SizedBox(width: 8),
-              Transform.flip(
-                flipX: true,
-                child: _buildLeftIcon(colors, isThisPlaying),
-              ),
-            ],
+            const SizedBox(width: 8),
           ],
-        ),
+          // 发送失败图标（自己发送的消息，显示在左侧）
+          if (widget.isSentByMe && widget.status == MessageDisplayStatus.failed)
+            Padding(
+              padding: const EdgeInsets.only(right: 8, top: 8),
+              child: MessageFailedIndicator(
+                onRetry: () {},
+                size: 20,
+              ),
+            ),
+          // 消息气泡
+          Flexible(
+            child: GestureDetector(
+              onTap: () => _onTap(),
+              onLongPress: widget.onLongPress,
+              child: Container(
+                constraints: BoxConstraints(
+                  minWidth: 120,
+                  maxWidth: MediaQuery.of(context).size.width * 0.65,
+                ),
+                padding: MessageStyles.bubblePadding,
+                decoration: MessageStyles.bubble(
+                  widget.isSentByMe
+                      ? colors.messageBubbleSent
+                      : colors.messageBubbleReceived,
+                  radius: widget.isSentByMe
+                      ? MessageStyles.bubbleRadiusSent
+                      : MessageStyles.bubbleRadiusReceived,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 发送者名称（群聊时显示）
+                    if (widget.showSenderName && widget.senderName != null && !widget.isSentByMe)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          widget.senderName!,
+                          style: MessageStyles.senderName(colors.primary),
+                        ),
+                      ),
+                    // 音频播放区域
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 声波图标/下载进度（发送的在右边，接收的在左边）
+                        if (!widget.isSentByMe) ...[
+                          _buildLeftIcon(colors, isThisPlaying),
+                          const SizedBox(width: 8),
+                        ],
+                        // 时长显示
+                        Text(
+                          displayDuration,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: widget.isSentByMe ? Colors.black87 : colors.textPrimary,
+                          ),
+                        ),
+                        // 声波图标（发送的在右边）
+                        if (widget.isSentByMe) ...[
+                          const SizedBox(width: 8),
+                          Transform.flip(
+                            flipX: true,
+                            child: _buildLeftIcon(colors, isThisPlaying),
+                          ),
+                        ],
+                      ],
+                    ),
+                    // 消息状态（自己发送的消息显示）
+                    if (widget.isSentByMe && widget.status != null && widget.status != MessageDisplayStatus.failed)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            _buildStatusIcon(colors),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // 右侧头像（自己发送的消息）
+          if (widget.showAvatar && widget.isSentByMe) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: widget.onAvatarTap,
+              child: ImAvatar.small(
+                userId: widget.senderId ?? '',
+                name: widget.senderName,
+                avatarUrl: widget.senderAvatar,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -412,6 +524,32 @@ class _AudioMessageBubbleState extends ConsumerState<AudioMessageBubble> {
     final minutes = duration.inMinutes;
     final seconds = duration.inSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  /// 构建消息状态图标
+  Widget _buildStatusIcon(ImColorScheme colors) {
+    switch (widget.status!) {
+      case MessageDisplayStatus.sending:
+        return SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            valueColor: AlwaysStoppedAnimation(colors.textTertiary),
+          ),
+        );
+      case MessageDisplayStatus.sent:
+        // 单勾表示已发送
+        return Icon(Icons.check, size: 14, color: colors.textTertiary);
+      case MessageDisplayStatus.delivered:
+        return Icon(Icons.done_all, size: 14, color: colors.textTertiary);
+      case MessageDisplayStatus.read:
+        // 蓝色双勾表示已读
+        return Icon(Icons.done_all, size: 14, color: colors.info);
+      case MessageDisplayStatus.failed:
+        // 错误图标在气泡左侧显示
+        return const SizedBox.shrink();
+    }
   }
 }
 

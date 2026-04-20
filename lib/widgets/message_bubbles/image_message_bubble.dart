@@ -37,6 +37,7 @@ class ImageMessageBubble extends StatefulWidget {
     this.senderId,
     this.senderName,
     this.senderAvatar,
+    this.showSenderName = false,
     this.showAvatar = false,
     this.autoDownload = true,
     this.onTap,
@@ -77,6 +78,9 @@ class ImageMessageBubble extends StatefulWidget {
 
   /// 发送者头像 URL
   final String? senderAvatar;
+
+  /// 是否显示发送者名称
+  final bool showSenderName;
 
   /// 是否显示头像
   final bool showAvatar;
@@ -372,49 +376,70 @@ class _ImageMessageBubbleState extends State<ImageMessageBubble> {
                 size: 20,
               ),
             ),
-          // 图片容器
-          GestureDetector(
-            onTap: _onTap,
-            onLongPress: widget.onLongPress,
-            child: SizedBox(
-              width: displaySize.width,
-              height: displaySize.height,
-              child: Stack(
-                children: [
-                  // 图片
-                  Hero(
-                    tag: 'image_${widget.messageId ?? widget.imageUrl ?? ''}',
-                    child: ClipRRect(
-                      borderRadius: widget.isSentByMe
-                          ? MessageStyles.bubbleRadiusSent
-                          : MessageStyles.bubbleRadiusReceived,
-                      child: _buildImage(colors, displaySize),
+          // 消息内容
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 发送者名称（群聊时显示）
+                if (widget.showSenderName && widget.senderName != null && !widget.isSentByMe)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      widget.senderName!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
+                      ),
                     ),
                   ),
-                  // 下载进度遮罩
-                  if (_isDownloading) _buildDownloadOverlay(colors, displaySize),
-                  // 下载按钮
-                  if (!_hasLocalFile && _needsDownload && !_isDownloading && !_downloadFailed)
-                    _buildDownloadButton(colors, displaySize),
-                  // 重试按钮
-                  if (_downloadFailed && !_hasLocalFile)
-                    _buildRetryDownloadButton(colors, displaySize),
-                  // 上传进度遮罩
-                  if (widget.uploadProgress != null && widget.uploadProgress! < 1.0)
-                    _buildUploadOverlay(colors, displaySize),
-                  // 发送中指示器
-                  if (widget.status == MessageDisplayStatus.sending &&
-                      widget.uploadProgress == null)
-                    _buildSendingIndicator(colors),
-                  // 已发送/已读状态指示器（仅自己发送的消息）
-                  if (widget.isSentByMe &&
-                      widget.status != null &&
-                      widget.status != MessageDisplayStatus.failed &&
-                      widget.status != MessageDisplayStatus.sending &&
-                      widget.uploadProgress == null)
-                    _buildStatusIndicator(colors),
-                ],
-              ),
+                // 图片容器
+                GestureDetector(
+                  onTap: _onTap,
+                  onLongPress: widget.onLongPress,
+                  child: SizedBox(
+                    width: displaySize.width,
+                    height: displaySize.height,
+                    child: Stack(
+                      children: [
+                        // 图片
+                        Hero(
+                          tag: 'image_${widget.messageId ?? widget.imageUrl ?? ''}',
+                          child: ClipRRect(
+                            borderRadius: widget.isSentByMe
+                                ? MessageStyles.bubbleRadiusSent
+                                : MessageStyles.bubbleRadiusReceived,
+                            child: _buildImage(colors, displaySize),
+                          ),
+                        ),
+                        // 下载进度遮罩
+                        if (_isDownloading) _buildDownloadOverlay(colors, displaySize),
+                        // 下载按钮
+                        if (!_hasLocalFile && _needsDownload && !_isDownloading && !_downloadFailed)
+                          _buildDownloadButton(colors, displaySize),
+                        // 重试按钮
+                        if (_downloadFailed && !_hasLocalFile)
+                          _buildRetryDownloadButton(colors, displaySize),
+                        // 上传进度遮罩
+                        if (widget.uploadProgress != null && widget.uploadProgress! < 1.0)
+                          _buildUploadOverlay(colors, displaySize),
+                        // 发送中指示器
+                        if (widget.status == MessageDisplayStatus.sending &&
+                            widget.uploadProgress == null)
+                          _buildSendingIndicator(colors),
+                        // 已发送/已读状态指示器（仅自己发送的消息）
+                        if (widget.isSentByMe &&
+                            widget.status != null &&
+                            widget.status != MessageDisplayStatus.failed &&
+                            widget.status != MessageDisplayStatus.sending &&
+                            widget.uploadProgress == null)
+                          _buildStatusIndicator(colors),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           // 右侧头像

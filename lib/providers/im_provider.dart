@@ -277,6 +277,8 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
         // 忽略自己发的消息回显，因为发送时已经保存了
         return;
       }
+      // 群聊中，其他用户发送的消息，isMe 为 false
+      isMe = false;
     } else {
       // 单聊消息
       conversationId = fromBare;
@@ -287,7 +289,12 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       if (fromBare == currentJid) {
         return;
       }
+      // 单聊中，对方发送的消息，isMe 为 false
+      isMe = false;
     }
+    
+    print('[IMProvider] isMe: $isMe, senderName: $senderName, myNickname: $myNickname');
+    print('[IMProvider] fullFrom: $fullFrom, fromBare: $fromBare, currentJid: $currentJid');
 
     final repository = ref.read(repositoryProvider);
 
@@ -307,6 +314,9 @@ class ConversationsNotifier extends StateNotifier<List<Conversation>> {
       isMe: isMe,
       messageType: messageType,
     );
+    
+    print('[IMProvider] Saving incoming message - isMe: $isMe, senderName: $senderName, conversationId: $conversationId');
+    print('[IMProvider] Current JID: $currentJid, myNickname: $myNickname');
     await repository.saveMessage(msg);
 
     // 更新或创建会话

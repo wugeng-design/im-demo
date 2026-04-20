@@ -61,7 +61,7 @@
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>用于保存图片和视频到相册</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>需要访问麦克风以录制语音消息发送给好友</string>
+	<string>用于录制视频时录音</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>UIBackgroundModes</key>

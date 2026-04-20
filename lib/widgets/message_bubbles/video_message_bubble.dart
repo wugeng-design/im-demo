@@ -23,6 +23,7 @@ class VideoMessageBubble extends StatelessWidget {
     this.senderId,
     this.senderName,
     this.senderAvatar,
+    this.showSenderName = false,
     this.showAvatar = false,
     this.onTap,
     this.onLongPress,
@@ -62,6 +63,9 @@ class VideoMessageBubble extends StatelessWidget {
 
   /// 发送者头像 URL
   final String? senderAvatar;
+
+  /// 是否显示发送者名称
+  final bool showSenderName;
 
   /// 是否显示头像
   final bool showAvatar;
@@ -118,44 +122,65 @@ class VideoMessageBubble extends StatelessWidget {
                 size: 20,
               ),
             ),
-          // 视频容器
-          GestureDetector(
-            onTap: onTap,
-            onLongPress: onLongPress,
-            child: SizedBox(
-              width: displaySize.width,
-              height: displaySize.height,
-              child: Stack(
-                children: [
-                  // 缩略图
-                  ClipRRect(
-                    borderRadius: isSentByMe
-                        ? MessageStyles.bubbleRadiusSent
-                        : MessageStyles.bubbleRadiusReceived,
-                    child: _buildThumbnail(colors, displaySize),
+          // 消息内容
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 发送者名称（群聊时显示）
+                if (showSenderName && senderName != null && !isSentByMe)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      senderName!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
+                      ),
+                    ),
                   ),
-                  // 播放按钮
-                  if (status != MessageDisplayStatus.sending &&
-                      (uploadProgress == null || uploadProgress! >= 1.0))
-                    _buildPlayButton(),
-                  // 时长标签
-                  if (duration != null) _buildDurationLabel(),
-                  // 上传进度遮罩
-                  if (uploadProgress != null && uploadProgress! < 1.0)
-                    _buildUploadOverlay(colors, displaySize),
-                  // 发送中指示器
-                  if (status == MessageDisplayStatus.sending &&
-                      uploadProgress == null)
-                    _buildSendingIndicator(colors),
-                  // 已发送/已读状态指示器（仅自己发送的消息）
-                  if (isSentByMe &&
-                      status != null &&
-                      status != MessageDisplayStatus.failed &&
-                      status != MessageDisplayStatus.sending &&
-                      uploadProgress == null)
-                    _buildStatusIndicator(colors),
-                ],
-              ),
+                // 视频容器
+                GestureDetector(
+                  onTap: onTap,
+                  onLongPress: onLongPress,
+                  child: SizedBox(
+                    width: displaySize.width,
+                    height: displaySize.height,
+                    child: Stack(
+                      children: [
+                        // 缩略图
+                        ClipRRect(
+                          borderRadius: isSentByMe
+                              ? MessageStyles.bubbleRadiusSent
+                              : MessageStyles.bubbleRadiusReceived,
+                          child: _buildThumbnail(colors, displaySize),
+                        ),
+                        // 播放按钮
+                        if (status != MessageDisplayStatus.sending &&
+                            (uploadProgress == null || uploadProgress! >= 1.0))
+                          _buildPlayButton(),
+                        // 时长标签
+                        if (duration != null) _buildDurationLabel(),
+                        // 上传进度遮罩
+                        if (uploadProgress != null && uploadProgress! < 1.0)
+                          _buildUploadOverlay(colors, displaySize),
+                        // 发送中指示器
+                        if (status == MessageDisplayStatus.sending &&
+                            uploadProgress == null)
+                          _buildSendingIndicator(colors),
+                        // 已发送/已读状态指示器（仅自己发送的消息）
+                        if (isSentByMe &&
+                            status != null &&
+                            status != MessageDisplayStatus.failed &&
+                            status != MessageDisplayStatus.sending &&
+                            uploadProgress == null)
+                          _buildStatusIndicator(colors),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           // 右侧头像（自己发送的消息）

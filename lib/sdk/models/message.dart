@@ -10,6 +10,7 @@ enum MessageType {
   file,
   system,
   audio,
+  location,
 }
 
 /// 回复消息信息
@@ -94,6 +95,8 @@ class ReplyInfo {
         return body;
       case MessageType.text:
         return body;
+      case MessageType.location:
+        return '[位置]';
     }
   }
 }
@@ -135,7 +138,8 @@ class Message {
       messageType == MessageType.image ||
       messageType == MessageType.video ||
       messageType == MessageType.file ||
-      messageType == MessageType.audio;
+      messageType == MessageType.audio ||
+      messageType == MessageType.location;
 
   /// 获取显示文本（媒体消息显示类型描述）
   String get displayBody {
@@ -152,6 +156,8 @@ class Message {
         return body;
       case MessageType.text:
         return body;
+      case MessageType.location:
+        return '[位置]';
     }
   }
 

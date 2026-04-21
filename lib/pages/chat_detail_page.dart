@@ -13,11 +13,13 @@ import '../sdk/services/voice_recorder_service.dart';
 import '../theme/im_design_tokens.dart';
 import '../widgets/message_bubbles/message_bubbles.dart';
 import '../widgets/input/input.dart';
+import '../widgets/im_avatar.dart';
 import '../widgets/forward_message_sheet.dart';
 import 'group_detail_page.dart';
 import 'message_search_page.dart';
 import 'media/image_preview_page.dart';
 import 'media/video_player_page.dart';
+import 'location_viewer_page.dart';
 
 /// 聊天详情页面
 class ChatDetailPage extends ConsumerStatefulWidget {
@@ -403,6 +405,80 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
 
     final file = File(result.path!);
     _sendMediaMessage(file, MediaType.audio, duration: result.duration);
+  }
+
+  Future<void> _onLocationSelected(Map<String, dynamic> locationData) async {
+    final service = ref.read(imConnectionServiceProvider);
+    final repository = ref.read(repositoryProvider);
+    final currentJid = service.currentJid;
+
+    if (currentJid == null) return;
+
+    final latitude = locationData['latitude'] as double;
+    final longitude = locationData['longitude'] as double;
+    final address = locationData['address'] as String;
+
+    // 创建位置消息的媒体元数据
+    final media = MediaMetadata(
+      type: MediaType.file, // 暂时使用file类型，后续可以添加location类型
+      latitude: latitude,
+      longitude: longitude,
+      fileName: address, // 存储地址作为文件名
+    );
+
+    // 创建位置消息
+    final messageId = DateTime.now().millisecondsSinceEpoch.toString();
+    final message = Message(
+      id: messageId,
+      conversationId: widget.conversationId,
+      senderId: currentJid,
+      senderName: currentJid.split('@').first,
+      body: address,
+      timestamp: DateTime.now(),
+      isMe: true,
+      status: 'sending',
+      messageType: MessageType.location, // 使用新的location消息类型
+      media: media, // 存储位置信息
+    );
+
+    // 保存到数据库
+    await repository.saveMessage(message);
+    _scrollToBottom();
+
+    try {
+      // 发送消息到服务器
+      // 位置消息格式: [LOCATION:lat,lng]address
+      final isGroup = widget.conversationId.contains('@conference.');
+      final messageBody = '[LOCATION:$latitude,$longitude]$address';
+      await service.sendMessage(widget.conversationId, messageBody, isGroupChat: isGroup);
+
+      await repository.updateMessageStatus(messageId, 'sent');
+
+      // 更新会话列表
+      final existingConversation = ref.read(conversationsProvider).firstWhere(
+        (c) => c.id == widget.conversationId,
+        orElse: () => throw StateError('Conversation not found'),
+      );
+      await ref.read(conversationsProvider.notifier).upsertConversation(
+        existingConversation.copyWith(
+          lastMessage: '[位置] $address',
+          lastMessageTime: DateTime.now(),
+        ),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('位置发送成功: $address')),
+        );
+      }
+    } catch (e) {
+      await repository.updateMessageStatus(messageId, 'failed');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('发送失败: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _sendMediaMessage(File file, MediaType type, {Duration? duration}) async {
@@ -840,8 +916,95 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       case MessageType.system:
         return '[系统消息]';
       default:
+        // 检查是否是位置消息
+        if (message.body.startsWith('[LOCATION:')) {
+          return '[位置]';
+        }
         final body = message.body;
         return body.length > 50 ? '${body.substring(0, 50)}...' : body;
+    }
+  }
+
+  /// 构建发送者名称（群聊中显示）
+  Widget _buildSenderName(String senderName, ImColorScheme colors) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 56, bottom: 2),
+      child: Text(
+        senderName,
+        style: TextStyle(
+          color: colors.textSecondary,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  /// 构建消息状态（时间和发送状态）
+  Widget _buildMessageStatus(Message message, ImColorScheme colors, bool isMe) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: isMe ? 0 : 56,
+        right: isMe ? 12 : 0,
+        top: 4,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          Text(
+            _formatMessageTime(message.timestamp),
+            style: TextStyle(
+              color: colors.textTertiary,
+              fontSize: 11,
+            ),
+          ),
+          if (isMe) ...[
+            const SizedBox(width: 4),
+            _buildMessageStatusIcon(message.status, colors),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 构建消息状态图标
+  Widget _buildMessageStatusIcon(String? status, ImColorScheme colors) {
+    switch (status) {
+      case 'sending':
+        return SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: colors.textTertiary,
+          ),
+        );
+      case 'sent':
+        return Icon(
+          Icons.check,
+          size: 12,
+          color: colors.textTertiary,
+        );
+      case 'delivered':
+        return Icon(
+          Icons.done_all,
+          size: 12,
+          color: colors.textTertiary,
+        );
+      case 'read':
+        return Icon(
+          Icons.done_all,
+          size: 12,
+          color: colors.primary,
+        );
+      case 'failed':
+        return Icon(
+          Icons.error_outline,
+          size: 12,
+          color: colors.error,
+        );
+      default:
+        return const SizedBox.shrink();
     }
   }
 
@@ -882,6 +1045,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onVideoSelected: _onVideoSelected,
               onFileSelected: _onFileSelected,
               onVoiceRecordingComplete: _onVoiceRecordingComplete,
+              onLocationSelected: _onLocationSelected,
               mentionableMembers: widget.isGroup ? _mentionableMembers : null,
             ),
           ]
@@ -897,6 +1061,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onVideoSelected: _onVideoSelected,
               onFileSelected: _onFileSelected,
               onVoiceRecordingComplete: _onVoiceRecordingComplete,
+              onLocationSelected: _onLocationSelected,
               mentionableMembers: widget.isGroup ? _mentionableMembers : null,
             )
           else
@@ -1339,7 +1504,228 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           ),
         );
 
+      case MessageType.location:
+        // 处理位置消息
+        final latitude = message.media?.latitude;
+        final longitude = message.media?.longitude;
+        final address = message.body;
+
+        // 创建位置消息气泡（使用标准消息气泡结构）
+        bubble = Row(
+          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 左侧头像（接收的消息）
+            if (showAvatar && !isMe) ...[
+              ImAvatar.small(
+                userId: message.senderId,
+                name: message.senderName,
+                avatarUrl: message.senderAvatar,
+              ),
+              const SizedBox(width: 8),
+            ],
+            // 发送失败图标
+            if (isMe && status == MessageDisplayStatus.failed)
+              Padding(
+                padding: const EdgeInsets.only(right: 8, top: 8),
+                child: GestureDetector(
+                  onTap: onRetry,
+                  child: Icon(
+                    Icons.error_outline,
+                    size: 20,
+                    color: colors.error,
+                  ),
+                ),
+              ),
+            // 消息气泡
+            Flexible(
+              child: GestureDetector(
+                onTap: () {
+                  if (latitude != null && longitude != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => LocationViewerPage(
+                          latitude: latitude,
+                          longitude: longitude,
+                          address: address,
+                        ),
+                      ),
+                    );
+                  }
+                },
+                child: Column(
+                  crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  children: [
+                    // 发送者名称（群聊时显示）
+                    if (widget.isGroup && !isMe && message.senderName != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4, left: 12),
+                        child: Text(
+                          message.senderName!,
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 280),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isMe ? colors.primary : colors.surfaceVariant,
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(16),
+                          topRight: const Radius.circular(16),
+                          bottomLeft: isMe ? const Radius.circular(16) : const Radius.circular(4),
+                          bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(16),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                color: isMe ? Colors.white : colors.primary,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  address,
+                                  style: TextStyle(
+                                    color: isMe ? Colors.white : colors.textPrimary,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${latitude?.toStringAsFixed(6)}, ${longitude?.toStringAsFixed(6)}',
+                            style: TextStyle(
+                              color: isMe ? Colors.white.withOpacity(0.8) : colors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // 消息状态
+                    Padding(
+                      padding: EdgeInsets.only(
+                        left: isMe ? 0 : 12,
+                        right: isMe ? 12 : 0,
+                        top: 4,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                        children: [
+                          Text(
+                            _formatMessageTime(message.timestamp),
+                            style: TextStyle(
+                              color: colors.textTertiary,
+                              fontSize: 11,
+                            ),
+                          ),
+                          if (isMe) ...[
+                            const SizedBox(width: 4),
+                            _buildMessageStatusIcon(message.status, colors),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // 右侧头像（自己发送的消息）
+            if (showAvatar && isMe) ...[
+              const SizedBox(width: 8),
+              ImAvatar.small(
+                userId: message.senderId,
+                name: message.senderName,
+                avatarUrl: message.senderAvatar,
+              ),
+            ],
+          ],
+        );
+        break;
+
       case MessageType.text:
+        // 检查是否是旧格式的位置消息（用于兼容）
+        bool isOldLocationMessage = message.body.startsWith('[LOCATION:');
+        if (isOldLocationMessage) {
+          // 解析位置信息
+          final locationMatch = RegExp(r'^\[LOCATION:([^,]+),([^\]]+)\](.+)$').firstMatch(message.body);
+          if (locationMatch != null) {
+            final latitude = double.tryParse(locationMatch.group(1) ?? '');
+            final longitude = double.tryParse(locationMatch.group(2) ?? '');
+            final address = locationMatch.group(3) ?? '';
+            
+            // 创建位置消息气泡
+            bubble = Container(
+              constraints: const BoxConstraints(maxWidth: 280),
+              child: Column(
+                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (widget.isGroup && !isMe) _buildSenderName(message.senderName, colors),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: isMe ? colors.primary : colors.surfaceVariant,
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(16),
+                        topRight: const Radius.circular(16),
+                        bottomLeft: isMe ? const Radius.circular(16) : const Radius.circular(4),
+                        bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(16),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.location_on,
+                              color: isMe ? Colors.white : colors.primary,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                address,
+                                style: TextStyle(
+                                  color: isMe ? Colors.white : colors.textPrimary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${latitude?.toStringAsFixed(6)}, ${longitude?.toStringAsFixed(6)}',
+                          style: TextStyle(
+                            color: isMe ? Colors.white.withOpacity(0.8) : colors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _buildMessageStatus(message, colors, isMe),
+                ],
+              ),
+            );
+            break;
+          }
+        }
+        
         // 回复消息使用 ReplyMessageBubble（Light-1-Client 样式）
         if (message.replyTo != null) {
           bubble = ReplyMessageBubble(

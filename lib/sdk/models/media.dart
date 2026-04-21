@@ -26,6 +26,8 @@ class MediaMetadata {
     this.width,
     this.height,
     this.duration,
+    this.latitude,
+    this.longitude,
   });
 
   /// 媒体类型
@@ -58,6 +60,12 @@ class MediaMetadata {
   /// 时长（视频，秒）
   final int? duration;
 
+  /// 纬度（位置消息）
+  final double? latitude;
+
+  /// 经度（位置消息）
+  final double? longitude;
+
   /// 是否有本地文件
   bool get hasLocalFile =>
       localFilePath != null && localFilePath!.isNotEmpty;
@@ -78,6 +86,8 @@ class MediaMetadata {
     int? width,
     int? height,
     int? duration,
+    double? latitude,
+    double? longitude,
   }) {
     return MediaMetadata(
       type: type ?? this.type,
@@ -90,6 +100,8 @@ class MediaMetadata {
       width: width ?? this.width,
       height: height ?? this.height,
       duration: duration ?? this.duration,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 
@@ -109,6 +121,8 @@ class MediaMetadata {
       width: json['width'] as int?,
       height: json['height'] as int?,
       duration: json['duration'] as int?,
+      latitude: json['latitude'] as double?,
+      longitude: json['longitude'] as double?,
     );
   }
 
@@ -125,6 +139,8 @@ class MediaMetadata {
       'width': width,
       'height': height,
       'duration': duration,
+      'latitude': latitude,
+      'longitude': longitude,
     };
   }
 

@@ -89,6 +89,10 @@ dependencies:
   # 分享
   share_plus: ^10.1.4
 
+  # 位置相关
+  geolocator: ^12.0.0
+  geocoding: ^2.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

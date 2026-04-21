@@ -30,6 +30,7 @@ class MessageInputArea extends StatefulWidget {
     this.onVideoSelected,
     this.onFileSelected,
     this.onVoiceRecordingComplete,
+    this.onLocationSelected,
     this.mentionableMembers,
   });
 
@@ -59,6 +60,9 @@ class MessageInputArea extends StatefulWidget {
 
   /// 语音录制完成回调
   final void Function(RecordingResult result)? onVoiceRecordingComplete;
+
+  /// 位置选择回调
+  final void Function(Map<String, dynamic> locationData)? onLocationSelected;
 
   /// 可提及的成员列表（群聊时传入）
   final List<MentionableMember>? mentionableMembers;
@@ -204,6 +208,9 @@ class MessageInputAreaState extends State<MessageInputArea> {
             onMultipleImagesSelected: widget.onMultipleImagesSelected != null
                 ? _onMultipleImagesSelected
                 : null,
+            onLocationSelected: (locationData) {
+              widget.onLocationSelected?.call(locationData);
+            },
           ),
       ],
     );
@@ -411,18 +418,35 @@ class MessageInputAreaState extends State<MessageInputArea> {
   void _onAttachmentSelected(AttachmentType type, File? file) {
     setState(() => _showAttachmentPanel = false);
 
-    if (file == null) return;
-
     switch (type) {
       case AttachmentType.image:
       case AttachmentType.camera:
-        widget.onImageSelected?.call(file);
+        if (file != null) {
+          widget.onImageSelected?.call(file);
+        }
+        break;
       case AttachmentType.video:
       case AttachmentType.videoCamera:
-        widget.onVideoSelected?.call(file);
+        if (file != null) {
+          widget.onVideoSelected?.call(file);
+        }
+        break;
       case AttachmentType.file:
-        widget.onFileSelected?.call(file);
+        if (file != null) {
+          widget.onFileSelected?.call(file);
+        }
+        break;
       case AttachmentType.voice:
+        break;
+      case AttachmentType.location:
+        // 位置信息处理
+        // 构建位置数据（在实际应用中，这里应该从 _handleLocation 方法传递过来）
+        final locationData = {
+          'latitude': 39.9042,
+          'longitude': 116.4074,
+          'address': '北京市东城区故宫博物院',
+        };
+        widget.onLocationSelected?.call(locationData);
         break;
     }
   }

@@ -337,6 +337,13 @@ class ReplyMessageBubble extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: textStyle,
         );
+      case MessageType.location:
+        return Text(
+          '${replyInfo.senderName}：[位置]',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: textStyle,
+        );
       case MessageType.text:
         final body = replyInfo.body.length > 100
             ? '${replyInfo.body.substring(0, 100)}...'

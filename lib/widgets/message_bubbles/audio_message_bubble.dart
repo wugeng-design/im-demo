@@ -8,8 +8,6 @@
 /// - 播放/暂停按钮
 /// - 时长显示
 /// - 原地播放（不跳转页面）
-library;
-
 import 'dart:convert';
 import 'dart:io';
 
@@ -23,6 +21,8 @@ import 'package:http/http.dart' as http;
 import '../../providers/audio_playback_provider.dart';
 import '../../theme/im_design_tokens.dart';
 import '../../theme/message_styles.dart';
+import '../im_avatar.dart';
+import 'message_bubble.dart';
 
 /// 语音消息气泡
 ///
@@ -41,7 +41,14 @@ class AudioMessageBubble extends ConsumerStatefulWidget {
     this.localFilePath,
     this.duration,
     this.cacheKey,
+    this.senderId,
+    this.senderName,
+    this.senderAvatar,
+    this.showSenderName = false,
+    this.showAvatar = false,
+    this.status,
     this.onTap,
+    this.onLongPress,
   });
 
   /// 消息 ID
@@ -62,8 +69,29 @@ class AudioMessageBubble extends ConsumerStatefulWidget {
   /// 缓存 key（用于生成本地缓存路径）
   final String? cacheKey;
 
+  /// 发送者 ID（用于头像占位符颜色）
+  final String? senderId;
+
+  /// 发送者名称
+  final String? senderName;
+
+  /// 发送者头像 URL
+  final String? senderAvatar;
+
+  /// 是否显示发送者名称
+  final bool showSenderName;
+
+  /// 是否显示头像
+  final bool showAvatar;
+
+  /// 消息状态
+  final MessageDisplayStatus? status;
+
   /// 点击回调
   final VoidCallback? onTap;
+
+  /// 长按回调
+  final VoidCallback? onLongPress;
 
   @override
   ConsumerState<AudioMessageBubble> createState() => _AudioMessageBubbleState();
@@ -268,45 +296,95 @@ class _AudioMessageBubbleState extends ConsumerState<AudioMessageBubble> {
         ? _formatDuration(playbackState.duration - playbackState.position)
         : _formatDuration(widget.duration ?? Duration.zero);
 
-    return GestureDetector(
-      onTap: () => _onTap(),
-      child: Container(
-        constraints: const BoxConstraints(minWidth: 120, maxWidth: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: widget.isSentByMe
-              ? colors.messageBubbleSent
-              : colors.messageBubbleReceived,
-          borderRadius: widget.isSentByMe
-              ? MessageStyles.bubbleRadiusSent
-              : MessageStyles.bubbleRadiusReceived,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 声波图标/下载进度（发送的在右边，接收的在左边）
-            if (!widget.isSentByMe) ...[
-              _buildLeftIcon(colors, isThisPlaying),
-              const SizedBox(width: 8),
-            ],
-            // 时长显示
-            Text(
-              displayDuration,
-              style: TextStyle(
-                fontSize: 14,
-                color: colors.textPrimary,
-              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: widget.isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 左侧头像（接收的消息）
+          if (widget.showAvatar && !widget.isSentByMe) ...[
+            ImAvatar.small(
+              userId: widget.senderId ?? '',
+              name: widget.senderName,
+              avatarUrl: widget.senderAvatar,
             ),
-            // 声波图标（发送的在右边）
-            if (widget.isSentByMe) ...[
-              const SizedBox(width: 8),
-              Transform.flip(
-                flipX: true,
-                child: _buildLeftIcon(colors, isThisPlaying),
-              ),
-            ],
+            const SizedBox(width: 8),
           ],
-        ),
+          // 消息内容
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 发送者名称（群聊时显示）
+                if (widget.showSenderName && widget.senderName != null && !widget.isSentByMe)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      widget.senderName!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
+                      ),
+                    ),
+                  ),
+                // 音频气泡
+                GestureDetector(
+                  onTap: () => _onTap(),
+                  onLongPress: widget.onLongPress,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 120, maxWidth: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: widget.isSentByMe
+                          ? colors.messageBubbleSent
+                          : colors.messageBubbleReceived,
+                      borderRadius: widget.isSentByMe
+                          ? MessageStyles.bubbleRadiusSent
+                          : MessageStyles.bubbleRadiusReceived,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 声波图标/下载进度（发送的在右边，接收的在左边）
+                        if (!widget.isSentByMe) ...[
+                          _buildLeftIcon(colors, isThisPlaying),
+                          const SizedBox(width: 8),
+                        ],
+                        // 时长显示
+                        Text(
+                          displayDuration,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                        // 声波图标（发送的在右边）
+                        if (widget.isSentByMe) ...[
+                          const SizedBox(width: 8),
+                          Transform.flip(
+                            flipX: true,
+                            child: _buildLeftIcon(colors, isThisPlaying),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 右侧头像（自己发送的消息）
+          if (widget.showAvatar && widget.isSentByMe) ...[
+            const SizedBox(width: 8),
+            ImAvatar.small(
+              userId: widget.senderId ?? '',
+              name: widget.senderName,
+              avatarUrl: widget.senderAvatar,
+            ),
+          ],
+        ],
       ),
     );
   }

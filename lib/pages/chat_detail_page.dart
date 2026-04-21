@@ -1184,6 +1184,9 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         break;
     }
 
+    // 日志：检查消息信息
+    print('[ChatDetail] Message info - id: ${message.id}, isMe: ${message.isMe}, senderName: ${message.senderName}, body: ${message.body}');
+
     // 是否显示头像（始终显示）
     const showAvatar = true;
 
@@ -1214,6 +1217,25 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     // 获取上传进度
     final uploadProgress = ref.watch(uploadProgressProvider)[message.id];
 
+    // 获取当前用户的 JID
+    final service = ref.read(imConnectionServiceProvider);
+    final currentJid = service.currentJid;
+    final myNickname = currentJid?.split('@').first ?? '';
+
+    // 重新计算 isMe
+    bool isMe = message.isMe;
+    if (widget.isGroup) {
+      // 群聊中，根据发送者名称判断是否是自己发送的消息
+      isMe = message.senderName == myNickname;
+    } else {
+      // 单聊中，根据发送者 ID 判断是否是自己发送的消息
+      isMe = message.senderId == currentJid;
+    }
+
+    // 日志：检查消息信息
+    print('[ChatDetail] Message info - id: ${message.id}, isMe: ${isMe}, senderName: ${message.senderName}, body: ${message.body}');
+    print('[ChatDetail] currentJid: $currentJid, myNickname: $myNickname, isGroup: ${widget.isGroup}');
+
     // 根据消息类型选择气泡
     switch (message.messageType) {
       case MessageType.image:
@@ -1221,7 +1243,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         // 对于发送的图片消息，优先使用 media.remoteUrl
         final imageUrl = message.media?.remoteUrl ?? _extractMediaUrl(message.body);
         bubble = ImageMessageBubble(
-          isSentByMe: message.isMe,
+          isSentByMe: isMe,
           localFilePath: message.media?.localFilePath,
           imageUrl: imageUrl,
           width: message.media?.width?.toDouble(),
@@ -1231,6 +1253,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           senderId: message.senderId,
           senderName: message.senderName,
           senderAvatar: message.senderAvatar,
+          showSenderName: widget.isGroup && !isMe,
           showAvatar: showAvatar,
           onTap: _isSelectionMode ? null : () => _previewImage(message),
           onRetry: onRetry,
@@ -1238,7 +1261,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
 
       case MessageType.video:
         bubble = VideoMessageBubble(
-          isSentByMe: message.isMe,
+          isSentByMe: isMe,
           thumbnailUrl: message.media?.thumbnailUrl,
           duration: message.media?.duration,
           width: message.media?.width?.toDouble(),
@@ -1248,6 +1271,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           senderId: message.senderId,
           senderName: message.senderName,
           senderAvatar: message.senderAvatar,
+          showSenderName: widget.isGroup && !isMe,
           showAvatar: showAvatar,
           onTap: _isSelectionMode ? null : () => _playVideo(message),
           onRetry: onRetry,
@@ -1256,7 +1280,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       case MessageType.file:
         bubble = FileMessageBubble(
           fileName: message.media?.fileName ?? '未知文件',
-          isSentByMe: message.isMe,
+          isSentByMe: isMe,
           fileSize: message.media?.fileSize,
           mimeType: message.media?.mimeType,
           status: status,
@@ -1264,6 +1288,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           senderId: message.senderId,
           senderName: message.senderName,
           senderAvatar: message.senderAvatar,
+          showSenderName: widget.isGroup && !isMe,
           showAvatar: showAvatar,
           onTap: _isSelectionMode ? null : () => _openFile(message),
           onRetry: onRetry,
@@ -1273,12 +1298,18 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         final audioUrl = message.media?.remoteUrl ?? _extractMediaUrl(message.body);
         bubble = AudioMessageBubble(
           messageId: message.id,
-          isSentByMe: message.isMe,
+          isSentByMe: isMe,
           audioUrl: audioUrl,
           localFilePath: message.media?.localFilePath,
           duration: message.media?.duration != null
               ? Duration(seconds: message.media!.duration!)
               : null,
+          senderId: message.senderId,
+          senderName: message.senderName,
+          senderAvatar: message.senderAvatar,
+          showSenderName: widget.isGroup && !isMe,
+          showAvatar: showAvatar,
+          status: status,
           onTap: _isSelectionMode ? null : () {},
         );
 
@@ -1286,8 +1317,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         // 系统消息不参与多选
         if (message.body.contains('撤回了一条消息')) {
           return RecalledMessageBubble(
-            isSentByMe: message.isMe,
-            senderName: message.isMe ? null : message.senderName,
+            isSentByMe: isMe,
+            senderName: isMe ? null : message.senderName,
           );
         }
         return Center(
@@ -1314,13 +1345,13 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           bubble = ReplyMessageBubble(
             text: message.body,
             replyInfo: message.replyTo!,
-            isSentByMe: message.isMe,
+            isSentByMe: isMe,
             timestamp: message.timestamp,
             status: message.status,
             senderId: message.senderId,
             senderName: message.senderName,
             senderAvatar: message.senderAvatar,
-            showSenderName: widget.isGroup && !message.isMe,
+            showSenderName: widget.isGroup && !isMe,
             showAvatar: showAvatar,
             onRetry: onRetry,
           );
@@ -1328,12 +1359,12 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           bubble = MessageBubble(
             body: message.body,
             timestamp: message.timestamp,
-            isSentByMe: message.isMe,
+            isSentByMe: isMe,
             status: status,
             senderId: message.senderId,
             senderName: message.senderName,
             senderAvatar: message.senderAvatar,
-            showSenderName: widget.isGroup && !message.isMe,
+            showSenderName: widget.isGroup && !isMe,
             showAvatar: showAvatar,
             isEdited: message.isEdited,
             onRetry: onRetry,

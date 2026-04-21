@@ -21,6 +21,7 @@ class FileMessageBubble extends StatelessWidget {
     this.senderId,
     this.senderName,
     this.senderAvatar,
+    this.showSenderName = false,
     this.showAvatar = false,
     this.onTap,
     this.onLongPress,
@@ -60,6 +61,9 @@ class FileMessageBubble extends StatelessWidget {
 
   /// 发送者头像 URL
   final String? senderAvatar;
+
+  /// 是否显示发送者名称
+  final bool showSenderName;
 
   /// 是否显示头像
   final bool showAvatar;
@@ -108,69 +112,88 @@ class FileMessageBubble extends StatelessWidget {
                 size: 20,
               ),
             ),
-          // 文件气泡
+          // 消息内容
           Flexible(
-            child: GestureDetector(
-              onTap: onTap,
-              onLongPress: onLongPress,
-              child: Container(
-                constraints: const BoxConstraints(maxWidth: 240),
-                padding: const EdgeInsets.all(12),
-                decoration: MessageStyles.bubble(
-                  isSentByMe
-                      ? colors.messageBubbleSent
-                      : colors.messageBubbleReceived,
-                  radius: isSentByMe
-                      ? MessageStyles.bubbleRadiusSent
-                      : MessageStyles.bubbleRadiusReceived,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 文件图标
-                    _buildFileIcon(colors),
-                    const SizedBox(width: 12),
-                    // 文件信息
-                    Flexible(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 文件名
-                          Text(
-                            fileName,
-                            style: TextStyle(
-                              color: isSentByMe
-                                  ? Colors.black87
-                                  : colors.textPrimary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const SizedBox(height: 4),
-                          // 文件大小和状态
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(child: _buildSubtitle(colors)),
-                              // 已读回执状态
-                              if (isSentByMe &&
-                                  status != null &&
-                                  status != MessageDisplayStatus.failed &&
-                                  status != MessageDisplayStatus.sending &&
-                                  uploadProgress == null) ...[
-                                const SizedBox(width: 6),
-                                _buildStatusIcon(colors),
-                              ],
-                            ],
-                          ),
-                        ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 发送者名称（群聊时显示）
+                if (showSenderName && senderName != null && !isSentByMe)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      senderName!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black,
                       ),
                     ),
-                  ],
+                  ),
+                // 文件气泡
+                GestureDetector(
+                  onTap: onTap,
+                  onLongPress: onLongPress,
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 240),
+                    padding: const EdgeInsets.all(12),
+                    decoration: MessageStyles.bubble(
+                      isSentByMe
+                          ? colors.messageBubbleSent
+                          : colors.messageBubbleReceived,
+                      radius: isSentByMe
+                          ? MessageStyles.bubbleRadiusSent
+                          : MessageStyles.bubbleRadiusReceived,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 文件图标
+                        _buildFileIcon(colors),
+                        const SizedBox(width: 12),
+                        // 文件信息
+                        Flexible(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 文件名
+                              Text(
+                                fileName,
+                                style: TextStyle(
+                                  color: isSentByMe
+                                      ? Colors.black87
+                                      : colors.textPrimary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              // 文件大小和状态
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(child: _buildSubtitle(colors)),
+                                  // 已读回执状态
+                                  if (isSentByMe &&
+                                      status != null &&
+                                      status != MessageDisplayStatus.failed &&
+                                      status != MessageDisplayStatus.sending &&
+                                      uploadProgress == null) ...[
+                                    const SizedBox(width: 6),
+                                    _buildStatusIcon(colors),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
           // 右侧头像（自己发送的消息）

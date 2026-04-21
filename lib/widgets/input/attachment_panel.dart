@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 
 import '../../theme/im_design_tokens.dart';
+import '../../pages/location_picker_page.dart';
 import 'attachment_models.dart';
 import 'attachment_picker.dart';
 
@@ -180,87 +179,29 @@ class _AttachmentPanelState extends State<AttachmentPanel> {
   }
 
   Future<void> _handleLocation() async {
-    try {
-      // 检查位置权限
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          _showError('需要位置权限才能发送位置信息');
-          return;
-        }
-      }
-      
-      if (permission == LocationPermission.deniedForever) {
-        _showError('位置权限已被永久拒绝，请在设置中开启');
-        return;
-      }
-      
-      // 获取当前位置
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
-      
-      // 通过地理编码获取地址信息
-      List<Placemark> placemarks = await placemarkFromCoordinates(
-        position.latitude,
-        position.longitude,
-      );
-      
-      if (placemarks.isEmpty) {
-        _showError('无法获取地址信息');
-        return;
-      }
-      
-      Placemark placemark = placemarks[0];
-      String address = _formatAddress(placemark);
-      
-      // 构建位置数据
-      final locationData = {
-        'latitude': position.latitude,
-        'longitude': position.longitude,
-        'address': address,
-      };
-      
-      // 调用位置选择回调
-      widget.onLocationSelected?.call(locationData);
-      
-      // 调用附件选择回调（保持兼容）
-      widget.onAttachmentSelected(AttachmentType.location, null);
-      
-      // 显示成功消息
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('位置发送成功: $address')),
-        );
-      }
-    } catch (e) {
-      _showError('获取位置失败: ${e.toString()}');
-    }
+    // 导航到位置选择页面
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LocationPickerPage(
+          onLocationSelected: (locationData) {
+            // 调用位置选择回调
+            widget.onLocationSelected?.call(locationData);
+            
+            // 调用附件选择回调（保持兼容）
+            widget.onAttachmentSelected(AttachmentType.location, null);
+            
+            // 显示成功消息
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('位置发送成功: ${locationData['address']}')),
+              );
+            }
+          },
+        ),
+      ),
+    );
   }
   
-  String _formatAddress(Placemark placemark) {
-    List<String> addressParts = [];
-    
-    if (placemark.country != null && placemark.country!.isNotEmpty) {
-      addressParts.add(placemark.country!);
-    }
-    if (placemark.administrativeArea != null && placemark.administrativeArea!.isNotEmpty) {
-      addressParts.add(placemark.administrativeArea!);
-    }
-    if (placemark.locality != null && placemark.locality!.isNotEmpty) {
-      addressParts.add(placemark.locality!);
-    }
-    if (placemark.subLocality != null && placemark.subLocality!.isNotEmpty) {
-      addressParts.add(placemark.subLocality!);
-    }
-    if (placemark.street != null && placemark.street!.isNotEmpty) {
-      addressParts.add(placemark.street!);
-    }
-    if (placemark.name != null && placemark.name!.isNotEmpty) {
-      addressParts.add(placemark.name!);
-    }
-    
-    return addressParts.join(' ');
-  }
+
 }

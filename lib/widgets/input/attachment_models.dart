@@ -21,6 +21,9 @@ enum AttachmentType {
 
   /// 语音
   voice,
+
+  /// 位置
+  location,
 }
 
 /// 附件选择回调（单文件）
@@ -78,6 +81,11 @@ class AttachmentOption {
         type: AttachmentType.file,
         icon: Icons.insert_drive_file,
         label: '文件',
+      ),
+      const AttachmentOption(
+        type: AttachmentType.location,
+        icon: Icons.location_on,
+        label: '位置',
       ),
     ];
   }

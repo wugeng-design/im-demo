@@ -207,6 +207,7 @@ class VoiceRecorderService {
   /// 开始录音
   Future<bool> startRecording({
     RecordingConfig config = RecordingConfig.defaultConfig,
+    bool checkPermission = true,
   }) async {
     _ensureInitialized();
 
@@ -218,11 +219,13 @@ class VoiceRecorderService {
     _updateState(RecordingState.preparing);
 
     try {
-      final hasPermission = await ensurePermission();
-      if (!hasPermission) {
-        _updateState(RecordingState.error);
-        debugPrint('[VoiceRecorder] 没有麦克风权限');
-        return false;
+      if (checkPermission) {
+        final hasPermission = await ensurePermission();
+        if (!hasPermission) {
+          _updateState(RecordingState.error);
+          debugPrint('[VoiceRecorder] 没有麦克风权限');
+          return false;
+        }
       }
 
       final path = await _generateFilePath(config);

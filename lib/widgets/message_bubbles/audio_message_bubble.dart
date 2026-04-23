@@ -47,6 +47,7 @@ class AudioMessageBubble extends ConsumerStatefulWidget {
     this.showSenderName = false,
     this.showAvatar = false,
     this.status,
+    this.voiceToText,
     this.onTap,
     this.onLongPress,
   });
@@ -86,6 +87,9 @@ class AudioMessageBubble extends ConsumerStatefulWidget {
 
   /// 消息状态
   final MessageDisplayStatus? status;
+
+  /// 语音转文字结果
+  final String? voiceToText;
 
   /// 点击回调
   final VoidCallback? onTap;
@@ -330,47 +334,71 @@ class _AudioMessageBubbleState extends ConsumerState<AudioMessageBubble> {
                     ),
                   ),
                 // 音频气泡
-                GestureDetector(
-                  onTap: () => _onTap(),
-                  onLongPress: widget.onLongPress,
-                  child: Container(
-                    constraints: const BoxConstraints(minWidth: 120, maxWidth: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: widget.isSentByMe
-                          ? colors.messageBubbleSent
-                          : colors.messageBubbleReceived,
-                      borderRadius: widget.isSentByMe
-                          ? MessageStyles.bubbleRadiusSent
-                          : MessageStyles.bubbleRadiusReceived,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 声波图标/下载进度（发送的在右边，接收的在左边）
-                        if (!widget.isSentByMe) ...[
-                          _buildLeftIcon(colors, isThisPlaying),
-                          const SizedBox(width: 8),
-                        ],
-                        // 时长显示
-                        Text(
-                          displayDuration,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: colors.textPrimary,
-                          ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _onTap(),
+                      onLongPress: widget.onLongPress,
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 120, maxWidth: 200),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: widget.isSentByMe
+                              ? colors.messageBubbleSent
+                              : colors.messageBubbleReceived,
+                          borderRadius: widget.isSentByMe
+                              ? MessageStyles.bubbleRadiusSent
+                              : MessageStyles.bubbleRadiusReceived,
                         ),
-                        // 声波图标（发送的在右边）
-                        if (widget.isSentByMe) ...[
-                          const SizedBox(width: 8),
-                          Transform.flip(
-                            flipX: true,
-                            child: _buildLeftIcon(colors, isThisPlaying),
-                          ),
-                        ],
-                      ],
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 声波图标/下载进度（发送的在右边，接收的在左边）
+                            if (!widget.isSentByMe) ...[
+                              _buildLeftIcon(colors, isThisPlaying),
+                              const SizedBox(width: 8),
+                            ],
+                            // 时长显示
+                            Text(
+                              displayDuration,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            // 声波图标（发送的在右边）
+                            if (widget.isSentByMe) ...[
+                              const SizedBox(width: 8),
+                              Transform.flip(
+                                flipX: true,
+                                child: _buildLeftIcon(colors, isThisPlaying),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                    // 语音转文字结果
+                    if (widget.voiceToText != null && widget.voiceToText!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: widget.isSentByMe
+                            ? const EdgeInsets.only(right: 8)
+                            : const EdgeInsets.only(left: 8),
+                        child: Text(
+                          widget.voiceToText!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colors.textSecondary,
+                            fontStyle: FontStyle.italic,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),

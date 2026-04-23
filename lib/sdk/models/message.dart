@@ -116,6 +116,7 @@ class Message {
   final MediaMetadata? media;
   final bool isEdited;
   final ReplyInfo? replyTo;
+  final String? voiceToText; // 语音转文字结果
 
   const Message({
     required this.id,
@@ -131,6 +132,7 @@ class Message {
     this.media,
     this.isEdited = false,
     this.replyTo,
+    this.voiceToText,
   });
 
   /// 是否是媒体消息
@@ -175,6 +177,7 @@ class Message {
     MediaMetadata? media,
     bool? isEdited,
     ReplyInfo? replyTo,
+    String? voiceToText,
   }) {
     return Message(
       id: id ?? this.id,
@@ -190,6 +193,7 @@ class Message {
       media: media ?? this.media,
       isEdited: isEdited ?? this.isEdited,
       replyTo: replyTo ?? this.replyTo,
+      voiceToText: voiceToText ?? this.voiceToText,
     );
   }
 
@@ -215,6 +219,7 @@ class Message {
       replyTo: json['replyTo'] != null
           ? ReplyInfo.fromJson(json['replyTo'] as Map<String, dynamic>)
           : null,
+      voiceToText: json['voiceToText'] as String?,
     );
   }
 
@@ -233,6 +238,7 @@ class Message {
       'messageType': messageType.name,
       'media': media?.toJson(),
       'replyTo': replyTo?.toJson(),
+      'voiceToText': voiceToText,
     };
   }
 

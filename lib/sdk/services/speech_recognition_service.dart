@@ -11,6 +11,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 /// 语音识别状态
@@ -70,6 +71,27 @@ class SpeechRecognitionService {
   /// 是否已初始化
   bool get isInitialized => _isInitialized;
 
+  /// 检查麦克风权限
+  Future<bool> checkPermission() async {
+    final status = await Permission.microphone.status;
+    debugPrint('[SpeechRecognition] 麦克风权限状态: $status');
+    return status.isGranted;
+  }
+
+  /// 请求麦克风权限
+  Future<bool> requestPermission() async {
+    final status = await Permission.microphone.request();
+    debugPrint('[SpeechRecognition] 请求麦克风权限结果: $status');
+    return status.isGranted;
+  }
+
+  /// 检查并请求权限
+  Future<bool> ensurePermission() async {
+    final hasPermission = await checkPermission();
+    if (hasPermission) return true;
+    return await requestPermission();
+  }
+
   /// 初始化
   void _ensureInitialized() {
     if (_stateController == null) {
@@ -91,6 +113,14 @@ class SpeechRecognitionService {
     _updateState(SpeechRecognitionState.preparing);
 
     try {
+      // 检查并请求麦克风权限
+      final hasPermission = await ensurePermission();
+      if (!hasPermission) {
+        _updateState(SpeechRecognitionState.error);
+        debugPrint('[SpeechRecognition] 没有麦克风权限');
+        return false;
+      }
+
       final available = await _speech.initialize(
         onStatus: (status) {
           debugPrint('[SpeechRecognition] 状态变化: $status');

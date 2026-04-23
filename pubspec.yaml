@@ -96,6 +96,9 @@ dependencies:
   # 链接打开
   url_launcher: ^6.3.1
   
+  # 语音转文字
+  speech_to_text: ^6.6.1
+  
 
 
 dev_dependencies:

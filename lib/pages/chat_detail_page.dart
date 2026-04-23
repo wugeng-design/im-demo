@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:developer' as dev;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import '../providers/im_provider.dart';
 import '../sdk/models/message.dart';
 import '../sdk/models/media.dart';
 import '../sdk/services/voice_recorder_service.dart';
+import '../sdk/services/speech_recognition_service.dart';
 import '../theme/im_design_tokens.dart';
 import '../widgets/message_bubbles/message_bubbles.dart';
 import '../widgets/input/input.dart';
@@ -388,7 +390,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     _sendMediaMessage(file, MediaType.file);
   }
 
-  void _onVoiceRecordingComplete(RecordingResult result) {
+  Future<void> _onVoiceRecordingComplete(RecordingResult result) async {
     if (!result.isSuccess) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('录音失败: ${result.error}')),
@@ -404,7 +406,19 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     }
 
     final file = File(result.path!);
-    _sendMediaMessage(file, MediaType.audio, duration: result.duration);
+    
+    // 语音转文字
+    String? voiceToText;
+    try {
+      final speechService = ref.read(speechRecognitionServiceProvider);
+      await speechService.initialize();
+      // 这里使用默认语言，实际应用中可以根据用户设置切换
+      voiceToText = await speechService.recognizeFromFile(result.path!);
+    } catch (e) {
+      dev.log('[ChatDetail] 语音转文字失败: $e');
+    }
+
+    _sendMediaMessage(file, MediaType.audio, duration: result.duration, voiceToText: voiceToText);
   }
 
   Future<void> _onLocationSelected(Map<String, dynamic> locationData) async {
@@ -481,7 +495,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     }
   }
 
-  Future<void> _sendMediaMessage(File file, MediaType type, {Duration? duration}) async {
+  Future<void> _sendMediaMessage(File file, MediaType type, {Duration? duration, String? voiceToText}) async {
     final service = ref.read(imConnectionServiceProvider);
     final repository = ref.read(repositoryProvider);
     final uploadService = ref.read(mediaUploadServiceProvider);
@@ -526,6 +540,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       status: 'uploading',
       messageType: messageType,
       media: media,
+      voiceToText: voiceToText,
     );
 
     // 保存到数据库
@@ -1475,6 +1490,7 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           showSenderName: widget.isGroup && !isMe,
           showAvatar: showAvatar,
           status: status,
+          voiceToText: message.voiceToText,
           onTap: _isSelectionMode ? null : () {},
         );
 

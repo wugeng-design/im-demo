@@ -84,6 +84,9 @@ PODS:
     - SDWebImage/Core (~> 5.17)
   - share_plus (0.0.1):
     - Flutter
+  - speech_to_text (0.0.1):
+    - Flutter
+    - Try
   - sqflite_darwin (0.0.4):
     - Flutter
     - FlutterMacOS
@@ -107,6 +110,7 @@ PODS:
     - sqlite3/perf-threadsafe
     - sqlite3/rtree
   - SwiftyGif (5.4.5)
+  - Try (2.1.1)
   - url_launcher_ios (0.0.1):
     - Flutter
   - video_player_avfoundation (0.0.1):
@@ -133,6 +137,7 @@ DEPENDENCIES:
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
   - record_ios (from `.symlinks/plugins/record_ios/ios`)
   - share_plus (from `.symlinks/plugins/share_plus/ios`)
+  - speech_to_text (from `.symlinks/plugins/speech_to_text/ios`)
   - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
   - sqlite3_flutter_libs (from `.symlinks/plugins/sqlite3_flutter_libs/darwin`)
   - url_launcher_ios (from `.symlinks/plugins/url_launcher_ios/ios`)
@@ -150,6 +155,7 @@ SPEC REPOS:
     - SDWebImageWebPCoder
     - sqlite3
     - SwiftyGif
+    - Try
 
 EXTERNAL SOURCES:
   audio_session:
@@ -180,6 +186,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/record_ios/ios"
   share_plus:
     :path: ".symlinks/plugins/share_plus/ios"
+  speech_to_text:
+    :path: ".symlinks/plugins/speech_to_text/ios"
   sqflite_darwin:
     :path: ".symlinks/plugins/sqflite_darwin/darwin"
   sqlite3_flutter_libs:
@@ -214,10 +222,12 @@ SPEC CHECKSUMS:
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   SDWebImageWebPCoder: 0e06e365080397465cc73a7a9b472d8a3bd0f377
   share_plus: 8b6f8b3447e494cca5317c8c3073de39b3600d1f
+  speech_to_text: b43a7d99aef037bd758ed8e45d79bbac035d2dfe
   sqflite_darwin: 5a7236e3b501866c1c9befc6771dfd73ffb8702d
   sqlite3: 7559e33dae4c78538df563795af3a86fc887ee71
   sqlite3_flutter_libs: 58ae36c0dd086395d066b4fe4de9cdca83e717b3
   SwiftyGif: 706c60cf65fa2bc5ee0313beece843c8eb8194d4
+  Try: 5ef669ae832617b3cee58cb2c6f99fb767a4ff96
   url_launcher_ios: bb13df5870e8c4234ca12609d04010a21be43dfa
   video_player_avfoundation: 7993f492ae0bd77edaea24d9dc051d8bb2cd7c86
   video_thumbnail: c4e2a3c539e247d4de13cd545344fd2d26ffafd1

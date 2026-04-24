@@ -414,6 +414,11 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       await speechService.initialize();
       // 这里使用默认语言，实际应用中可以根据用户设置切换
       voiceToText = await speechService.recognizeFromFile(result.path!);
+      if (voiceToText != null && voiceToText.isNotEmpty) {
+        dev.log('[ChatDetail] 语音转文字成功: $voiceToText');
+      } else {
+        dev.log('[ChatDetail] 语音转文字未能识别到内容');
+      }
     } catch (e) {
       dev.log('[ChatDetail] 语音转文字失败: $e');
     }

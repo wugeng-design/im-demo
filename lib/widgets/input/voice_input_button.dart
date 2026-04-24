@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../sdk/services/voice_recorder_service.dart';
 import '../../theme/im_design_tokens.dart';
@@ -83,24 +84,63 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
     });
   }
 
-  Future<bool> _checkPermission() async {
-    final recorder = ref.read(voiceRecorderServiceProvider);
-    final hasPermission = await recorder.checkPermission();
-    if (!hasPermission) {
-      return await recorder.requestPermission();
+  void _showPermissionDeniedDialog() {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('需要麦克风权限'),
+          content: const Text('麦克风权限被拒绝。请在设置中开启麦克风权限，以便录制语音消息。\n\n设置 → 隐私与安全 → 麦克风 → 畅聊天下'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                openAppSettings();
+              },
+              child: const Text('去设置'),
+            ),
+          ],
+        ),
+      );
     }
-    return true;
+  }
+
+  void _showPermissionRationaleDialog() {
+    if (mounted) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('需要麦克风权限'),
+          content: const Text('为了录制语音消息发送给好友，需要访问您的麦克风。\n\n点击"确定"后，系统会弹出权限请求对话框，请选择"允许"。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _startRecording();
+              },
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  Future<PermissionStatus> _checkPermission() async {
+    final status = await Permission.microphone.status;
+    debugPrint('[VoiceInputButton] 检查麦克风权限状态: $status');
+    return status;
   }
 
   Future<void> _startRecording() async {
-    final hasPermission = await _checkPermission();
-    if (!hasPermission) {
-      setState(() {
-        _errorMessage = '需要麦克风权限才能录制语音';
-      });
-      return;
-    }
-
     final recorder = ref.read(voiceRecorderServiceProvider);
     _setupSubscriptions(recorder);
 
@@ -111,7 +151,19 @@ class _VoiceInputButtonState extends ConsumerState<VoiceInputButton> {
       _errorMessage = null;
     });
 
-    await recorder.startRecording(checkPermission: false);
+    final success = await recorder.startRecording();
+
+    if (!success && mounted) {
+      final status = await _checkPermission();
+      if (mounted) {
+        debugPrint('[VoiceInputButton] 录音失败，权限状态: $status');
+        if (status.isPermanentlyDenied) {
+          _showPermissionDeniedDialog();
+        } else if (!status.isGranted) {
+          _showPermissionRationaleDialog();
+        }
+      }
+    }
   }
 
   Future<void> _stopRecording() async {

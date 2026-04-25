@@ -24,6 +24,12 @@ enum AttachmentType {
 
   /// 位置
   location,
+
+  /// 语音通话
+  voiceCall,
+
+  /// 视频通话
+  videoCall,
 }
 
 /// 附件选择回调（单文件）
@@ -86,6 +92,16 @@ class AttachmentOption {
         type: AttachmentType.location,
         icon: Icons.location_on,
         label: '位置',
+      ),
+      const AttachmentOption(
+        type: AttachmentType.voiceCall,
+        icon: Icons.call,
+        label: '语音通话',
+      ),
+      const AttachmentOption(
+        type: AttachmentType.videoCall,
+        icon: Icons.video_call,
+        label: '视频通话',
       ),
     ];
   }

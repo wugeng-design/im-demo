@@ -13,6 +13,8 @@ class AttachmentPanel extends StatefulWidget {
     required this.onAttachmentSelected,
     this.onMultipleImagesSelected,
     this.onLocationSelected,
+    this.onVoiceCallSelected,
+    this.onVideoCallSelected,
   });
 
   /// 附件选择回调（单文件）
@@ -23,6 +25,12 @@ class AttachmentPanel extends StatefulWidget {
 
   /// 位置选择回调
   final void Function(Map<String, dynamic> locationData)? onLocationSelected;
+
+  /// 语音通话回调
+  final void Function()? onVoiceCallSelected;
+
+  /// 视频通话回调
+  final void Function()? onVideoCallSelected;
 
   @override
   State<AttachmentPanel> createState() => _AttachmentPanelState();
@@ -162,6 +170,12 @@ class _AttachmentPanelState extends State<AttachmentPanel> {
         case AttachmentType.location:
           await _handleLocation();
           break;
+        case AttachmentType.voiceCall:
+          await _handleVoiceCall();
+          break;
+        case AttachmentType.videoCall:
+          await _handleVideoCall();
+          break;
       }
     } finally {
       if (mounted) {
@@ -187,10 +201,10 @@ class _AttachmentPanelState extends State<AttachmentPanel> {
           onLocationSelected: (locationData) {
             // 调用位置选择回调
             widget.onLocationSelected?.call(locationData);
-            
+
             // 调用附件选择回调（保持兼容）
             widget.onAttachmentSelected(AttachmentType.location, null);
-            
+
             // 显示成功消息
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -202,6 +216,16 @@ class _AttachmentPanelState extends State<AttachmentPanel> {
       ),
     );
   }
-  
+
+  Future<void> _handleVoiceCall() async {
+    setState(() => _isLoading = false);
+    widget.onVoiceCallSelected?.call();
+  }
+
+  Future<void> _handleVideoCall() async {
+    setState(() => _isLoading = false);
+    widget.onVideoCallSelected?.call();
+  }
+
 
 }

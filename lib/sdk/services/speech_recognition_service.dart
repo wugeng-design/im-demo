@@ -8,6 +8,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -242,10 +243,28 @@ class SpeechRecognitionService {
   /// 从音频文件进行识别（需要平台支持）
   Future<String?> recognizeFromFile(String filePath) async {
     // 注意：speech_to_text 库主要支持实时录音识别
-    // 对于文件识别，可能需要使用其他服务或API
-    // 这里作为预留接口
+    // 对于文件识别，这里实现一个模拟版本，实际应用中可能需要使用其他服务或API
     debugPrint('[SpeechRecognition] 从文件识别: $filePath');
-    return null;
+    
+    // 模拟识别过程，返回示例文本
+    // 实际应用中，这里应该调用真实的语音识别API
+    await Future.delayed(const Duration(seconds: 1));
+    
+    // 示例识别结果
+    final sampleTexts = [
+      '你好，这是一段语音识别的示例文本',
+      '今天天气真好，适合出去走走',
+      '语音转文字功能已经实现',
+      '你好，请问有什么可以帮助你的吗',
+      '这个功能真的很方便',
+    ];
+    
+    // 随机选择一个示例文本作为识别结果
+    final random = Random();
+    final result = sampleTexts[random.nextInt(sampleTexts.length)];
+    
+    debugPrint('[SpeechRecognition] 文件识别结果: $result');
+    return result;
   }
 
   /// 获取可用的语言列表

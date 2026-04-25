@@ -29,6 +29,9 @@ enum MessageMenuAction {
 
   /// 多选
   multiSelect,
+
+  /// 转文字
+  transcribe,
 }
 
 /// 消息操作菜单项
@@ -82,6 +85,7 @@ class MessageLongPressMenu {
     final isFailed = message.status == 'failed';
     final isSending = message.status == 'sending';
     final isTextMessage = message.messageType == MessageType.text;
+    final isAudioMessage = message.messageType == MessageType.audio;
     final canRecall = _canRecallMessage(message);
 
     // 发送失败 -> 重试
@@ -144,6 +148,15 @@ class MessageLongPressMenu {
         action: MessageMenuAction.multiSelect,
         icon: Icons.checklist,
         label: '多选',
+      ));
+    }
+
+    // 语音消息 -> 转文字
+    if (isAudioMessage && !isSending && !isFailed) {
+      items.add(const _MenuItem(
+        action: MessageMenuAction.transcribe,
+        icon: Icons.text_fields,
+        label: '转文字',
       ));
     }
 

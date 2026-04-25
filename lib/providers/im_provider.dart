@@ -796,6 +796,20 @@ class MessagesNotifier extends StateNotifier<List<Message>> {
     // TODO: 实际项目中这里应该发送 XMPP 编辑请求 (XEP-0308)
   }
 
+  /// 更新消息的语音转文字结果
+  Future<void> updateMessageVoiceToText(String messageId, String voiceToText) async {
+    final repository = ref.read(repositoryProvider);
+
+    await repository.updateMessageVoiceToText(messageId, voiceToText);
+
+    state = state.map((m) {
+      if (m.id == messageId) {
+        return m.copyWith(voiceToText: voiceToText);
+      }
+      return m;
+    }).toList();
+  }
+
   @override
   void dispose() {
     _messageSubscription?.cancel();

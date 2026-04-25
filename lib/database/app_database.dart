@@ -284,6 +284,12 @@ class AppDatabase extends _$AppDatabase {
         .write(MessagesCompanion(mediaJson: Value(mediaJson)));
   }
 
+  /// 更新消息的扩展数据
+  Future<void> updateMessageExtra(String messageId, String extra) {
+    return (update(messages)..where((t) => t.id.equals(messageId)))
+        .write(MessagesCompanion(extra: Value(extra)));
+  }
+
   // ===== 草稿操作 =====
 
   /// 保存会话草稿

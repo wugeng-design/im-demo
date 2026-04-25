@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:developer' as dev;
 
@@ -6,12 +7,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_file/open_file.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
 
 import '../providers/im_provider.dart';
 import '../sdk/models/message.dart';
 import '../sdk/models/media.dart';
 import '../sdk/services/voice_recorder_service.dart';
 import '../sdk/services/speech_recognition_service.dart';
+import '../sdk/services/tencent_asr_service.dart';
 import '../theme/im_design_tokens.dart';
 import '../widgets/message_bubbles/message_bubbles.dart';
 import '../widgets/input/input.dart';
@@ -725,6 +730,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
         _forwardMessage(message);
       case MessageMenuAction.multiSelect:
         _enterSelectionMode(message.id);
+      case MessageMenuAction.transcribe:
+        _transcribeAudioMessage(message);
     }
   }
 
@@ -919,6 +926,115 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('转发失败: ${result.error}')),
       );
+    }
+  }
+
+  /// 转写语音消息
+  Future<void> _transcribeAudioMessage(Message message) async {
+    if (message.messageType != MessageType.audio) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('只有语音消息才能转文字')),
+      );
+      return;
+    }
+
+    if (message.voiceToText != null && message.voiceToText!.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('转写结果: ${message.voiceToText}'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    String? localFilePath = message.media?.localFilePath;
+    if (localFilePath != null && localFilePath.isNotEmpty) {
+      if (localFilePath.startsWith('file://')) {
+        localFilePath = localFilePath.substring(7);
+      }
+    } else {
+      final audioUrl = message.media?.remoteUrl ?? _extractMediaUrl(message.body);
+      if (audioUrl != null && audioUrl.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('正在下载语音文件...')),
+        );
+        try {
+          final cacheDir = await getTemporaryDirectory();
+          final hash = md5.convert(utf8.encode(audioUrl)).toString();
+          final ext = audioUrl.split('.').last.split('?').first;
+          localFilePath = '${cacheDir.path}/audio_cache/audio_$hash.$ext';
+          final file = File(localFilePath!);
+
+          if (!(await file.exists())) {
+            final response = await http.get(Uri.parse(audioUrl));
+            if (response.statusCode == 200) {
+              await file.parent.create(recursive: true);
+              await file.writeAsBytes(response.bodyBytes);
+            } else {
+              throw Exception('下载失败: ${response.statusCode}');
+            }
+          }
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('下载语音文件失败: $e')),
+          );
+          return;
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法获取语音文件路径')),
+        );
+        return;
+      }
+    }
+
+    if (localFilePath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法获取语音文件路径')),
+      );
+      return;
+    }
+
+    final file = File(localFilePath);
+    if (!await file.exists()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('语音文件不存在')),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('正在转写语音...')),
+    );
+
+    try {
+      final asrService = ref.read(tencentAsrServiceProvider);
+      final result = await asrService.transcribe(localFilePath);
+
+      if (!mounted) return;
+
+      if (result.success && result.text != null) {
+        await ref.read(messagesProvider(widget.conversationId).notifier)
+            .updateMessageVoiceToText(message.id, result.text!);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('转写成功: ${result.text}'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('转写失败: ${result.errorMessage ?? "未知错误"}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('转写异常: $e')),
+        );
+      }
     }
   }
 

@@ -229,6 +229,13 @@ class ImRepository {
     await _db.updateMessageMedia(messageId, mediaJson);
   }
 
+  /// 更新消息的语音转文字结果
+  Future<void> updateMessageVoiceToText(String messageId, String voiceToText) async {
+    String extra = '{"voiceToText": ${jsonEncode(voiceToText)}}';
+
+    await _db.updateMessageExtra(messageId, extra);
+  }
+
   // ===== 草稿操作 =====
 
   /// 保存草稿
@@ -306,6 +313,7 @@ class ImRepository {
     // 解析 extra JSON 数据
     models.ReplyInfo? replyTo;
     bool isEdited = false;
+    String? voiceToText;
 
     if (db.extra != null && db.extra!.isNotEmpty) {
       // 兼容旧格式：直接是 'edited' 字符串
@@ -322,6 +330,9 @@ class ImRepository {
           }
           if (extraData['edited'] == true) {
             isEdited = true;
+          }
+          if (extraData['voiceToText'] != null) {
+            voiceToText = extraData['voiceToText'] as String;
           }
         } catch (_) {
           // 解析失败，忽略
@@ -348,6 +359,7 @@ class ImRepository {
       isEdited: isEdited,
       replyTo: replyTo,
       media: media,
+      voiceToText: voiceToText,
     );
   }
 

@@ -98,6 +98,9 @@ dependencies:
   
   # 语音转文字
   speech_to_text: ^6.6.1
+
+  # 语音/视频通话 (声网 Agora)
+  agora_rtc_engine: ^6.3.2
   
 
 

@@ -32,6 +32,8 @@ class MessageInputArea extends StatefulWidget {
     this.onVoiceRecordingComplete,
     this.onLocationSelected,
     this.mentionableMembers,
+    this.onVoiceCallSelected,
+    this.onVideoCallSelected,
   });
 
   /// 发送消息回调
@@ -66,6 +68,12 @@ class MessageInputArea extends StatefulWidget {
 
   /// 可提及的成员列表（群聊时传入）
   final List<MentionableMember>? mentionableMembers;
+
+  /// 语音通话回调
+  final void Function()? onVoiceCallSelected;
+
+  /// 视频通话回调
+  final void Function()? onVideoCallSelected;
 
   @override
   State<MessageInputArea> createState() => MessageInputAreaState();
@@ -211,6 +219,8 @@ class MessageInputAreaState extends State<MessageInputArea> {
             onLocationSelected: (locationData) {
               widget.onLocationSelected?.call(locationData);
             },
+            onVoiceCallSelected: widget.onVoiceCallSelected,
+            onVideoCallSelected: widget.onVideoCallSelected,
           ),
       ],
     );
@@ -439,14 +449,18 @@ class MessageInputAreaState extends State<MessageInputArea> {
       case AttachmentType.voice:
         break;
       case AttachmentType.location:
-        // 位置信息处理
-        // 构建位置数据（在实际应用中，这里应该从 _handleLocation 方法传递过来）
         final locationData = {
           'latitude': 39.9042,
           'longitude': 116.4074,
           'address': '北京市东城区故宫博物院',
         };
         widget.onLocationSelected?.call(locationData);
+        break;
+      case AttachmentType.voiceCall:
+        widget.onVoiceCallSelected?.call();
+        break;
+      case AttachmentType.videoCall:
+        widget.onVideoCallSelected?.call();
         break;
     }
   }

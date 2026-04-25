@@ -3,9 +3,11 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  agora_rtc_engine
   connectivity_plus
   file_selector_windows
   geolocator_windows
+  iris_method_channel
   permission_handler_windows
   record_windows
   share_plus

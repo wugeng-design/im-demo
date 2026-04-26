@@ -245,6 +245,9 @@ class StandaloneConnectionService implements ImConnectionService {
   /// 重连管理器（供外部访问）
   ReconnectManager get reconnectManager => _reconnectManager;
 
+  /// 是否是模拟登录
+  bool _isSimulatedLogin = false;
+
   @override
   Future<bool> connect(ImSdkConfig config, ImCredentials credentials) async {
     if (_whixp != null) {
@@ -254,6 +257,9 @@ class StandaloneConnectionService implements ImConnectionService {
     // 保存配置用于重连
     _savedConfig = config;
     _savedCredentials = credentials;
+
+    // 检查是否是模拟登录
+    _isSimulatedLogin = credentials.username == 'demo' && credentials.password == 'demo123';
 
     // 初始化 ejabberd REST API 客户端
     // 假设 REST API 端口为 XMPP 端口 - 2（如 5222 -> 5280 或自定义）
@@ -268,6 +274,17 @@ class StandaloneConnectionService implements ImConnectionService {
 
     // 重置重连管理器
     _reconnectManager.resetManualDisconnect();
+
+    // 如果是模拟登录，直接返回成功
+    if (_isSimulatedLogin) {
+      print('[Connection] 模拟登录模式');
+      _updateState(ImConnectionState.connecting);
+      await Future.delayed(Duration(milliseconds: 500));
+      _currentJid = '${credentials.username}@${config.domain}';
+      _updateState(ImConnectionState.authenticated);
+      _reconnectManager.markConnectionSuccess();
+      return true;
+    }
 
     final completer = Completer<bool>();
 
@@ -506,7 +523,18 @@ class StandaloneConnectionService implements ImConnectionService {
 
   @override
   Future<void> sendMessage(String toJid, String body, {bool isGroupChat = false}) async {
-    if (!isConnected || _whixp == null) {
+    if (!isConnected) {
+      throw StateError('Not connected');
+    }
+
+    // 如果是模拟登录，直接返回成功
+    if (_isSimulatedLogin) {
+      print('[Connection] 模拟登录模式：模拟发送消息');
+      print('[Connection] 发送消息到: $toJid, 内容: $body, 群聊: $isGroupChat');
+      return;
+    }
+
+    if (_whixp == null) {
       throw StateError('Not connected');
     }
 
@@ -574,7 +602,7 @@ class StandaloneConnectionService implements ImConnectionService {
   /// [members] 要邀请的成员 JID 列表
   /// 返回房间 JID
   Future<String> createRoom(String roomName, List<String> members) async {
-    if (!isConnected || _whixp == null) {
+    if (!isConnected) {
       throw StateError('Not connected');
     }
 
@@ -584,6 +612,18 @@ class StandaloneConnectionService implements ImConnectionService {
     // 生成房间 JID (使用时间戳作为唯一 ID)
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final roomJid = 'room_$timestamp@conference.$domain';
+
+    // 如果是模拟登录，直接返回房间 JID
+    if (_isSimulatedLogin) {
+      print('[Connection] 模拟登录模式：模拟创建群聊房间');
+      print('[Connection] 创建群聊: $roomName, 成员: ${members.join(', ')}');
+      print('[Connection] 房间 JID: $roomJid');
+      return roomJid;
+    }
+
+    if (_whixp == null) {
+      throw StateError('Not connected');
+    }
 
     // 加入/创建房间（发送 presence 到房间）
     await joinRoom(roomJid, nickname);
@@ -629,7 +669,18 @@ class StandaloneConnectionService implements ImConnectionService {
 
   /// 邀请用户加入群聊
   Future<void> inviteToRoom(String roomJid, String userJid, [String? roomName]) async {
-    if (!isConnected || _whixp == null) {
+    if (!isConnected) {
+      throw StateError('Not connected');
+    }
+
+    // 如果是模拟登录，直接返回成功
+    if (_isSimulatedLogin) {
+      print('[Connection] 模拟登录模式：模拟邀请用户加入群聊');
+      print('[Connection] 邀请用户: $userJid 加入群聊: ${roomName ?? '群聊'}');
+      return;
+    }
+
+    if (_whixp == null) {
       throw StateError('Not connected');
     }
 
@@ -923,6 +974,31 @@ class StandaloneConnectionService implements ImConnectionService {
   ///
   /// 返回用户 JID 列表（排除当前用户）
   Future<List<String>> getRegisteredUsers() async {
+    // 如果是模拟登录，返回模拟联系人
+    if (_isSimulatedLogin) {
+      print('[Connection] 模拟登录模式：返回模拟联系人');
+      final domain = _savedConfig?.domain ?? 'localhost';
+      final currentUser = _currentJid?.split('@').first ?? 'demo';
+      
+      // 模拟联系人列表
+      final mockUsers = [
+        'alice',
+        'bob',
+        'charlie',
+        'david',
+        'emma',
+        'frank',
+        'grace',
+        'henry'
+      ];
+      
+      // 转换为 JID 格式并排除当前用户
+      return mockUsers
+          .where((user) => user != currentUser)
+          .map((user) => '$user@$domain')
+          .toList();
+    }
+
     if (_ejabberdApi == null) {
       print('[Connection] ejabberd API 未初始化');
       return [];

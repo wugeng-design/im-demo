@@ -289,7 +289,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       // 模拟登录成功后跳转到主页
       if (mounted) {
         // 等待一小段时间模拟登录过程
-        await Future.delayed(const Duration(1000));
+        await Future.delayed(const Duration(milliseconds: 1000));
         
         // 跳转到主页
         Navigator.pushReplacement(

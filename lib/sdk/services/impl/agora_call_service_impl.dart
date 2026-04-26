@@ -1,5 +1,6 @@
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../call_service.dart';
 
@@ -79,12 +80,44 @@ class AgoraCallService extends CallService {
 
   @override
   Future<bool> checkPermissions() async {
-    return true;
+    try {
+      final micStatus = await Permission.microphone.status;
+      if (!micStatus.isGranted) {
+        return false;
+      }
+      
+      // 对于视频通话，还需要检查摄像头权限
+      final cameraStatus = await Permission.camera.status;
+      if (!cameraStatus.isGranted) {
+        return false;
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('[AgoraCall] Check permissions failed: $e');
+      return false;
+    }
   }
 
   @override
   Future<bool> requestPermissions() async {
-    return true;
+    try {
+      final micStatus = await Permission.microphone.request();
+      if (!micStatus.isGranted) {
+        return false;
+      }
+      
+      // 对于视频通话，还需要请求摄像头权限
+      final cameraStatus = await Permission.camera.request();
+      if (!cameraStatus.isGranted) {
+        return false;
+      }
+      
+      return true;
+    } catch (e) {
+      debugPrint('[AgoraCall] Request permissions failed: $e');
+      return false;
+    }
   }
 
   @override
@@ -102,6 +135,16 @@ class AgoraCallService extends CallService {
     if (currentCall != null && currentCall!.isActive) {
       notifyError('Already in a call');
       return null;
+    }
+
+    // 检查并请求权限
+    final hasPermission = await checkPermissions();
+    if (!hasPermission) {
+      final granted = await requestPermissions();
+      if (!granted) {
+        notifyError('Permission denied');
+        return null;
+      }
     }
 
     try {
@@ -148,6 +191,16 @@ class AgoraCallService extends CallService {
     if (currentCall == null || currentCall!.callId != callId) {
       notifyError('Call not found');
       return;
+    }
+
+    // 检查并请求权限
+    final hasPermission = await checkPermissions();
+    if (!hasPermission) {
+      final granted = await requestPermissions();
+      if (!granted) {
+        notifyError('Permission denied');
+        return;
+      }
     }
 
     try {

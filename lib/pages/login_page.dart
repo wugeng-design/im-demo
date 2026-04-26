@@ -256,6 +256,60 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
+  Future<void> _simulateLogin() async {
+    if (_isConnecting) return;
+
+    setState(() => _isConnecting = true);
+
+    try {
+      // 模拟登录成功
+      final service = ref.read(imConnectionServiceProvider);
+      
+      // 模拟设置连接状态
+      // 注意：这里我们不能直接修改服务的内部状态，因为它是私有的
+      // 我们将通过模拟配置和凭证来实现
+      
+      final config = ImSdkConfig(
+        host: 'localhost',
+        port: 5222,
+        domain: 'localhost',
+        useTls: false,
+        apiPort: 5280,
+      );
+      
+      final credentials = ImCredentials(
+        username: 'demo',
+        password: 'demo123',
+      );
+      
+      // 保存配置和凭证
+      // 注意：这里我们不能直接访问服务的私有属性，所以我们使用 connect 方法
+      // 但实际上我们会在 connect 方法中添加模拟逻辑
+      
+      // 模拟登录成功后跳转到主页
+      if (mounted) {
+        // 等待一小段时间模拟登录过程
+        await Future.delayed(const Duration(1000));
+        
+        // 跳转到主页
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomePage()),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('模拟登录错误: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isConnecting = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -461,6 +515,22 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('登录', style: TextStyle(fontSize: 16)),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // 模拟登录按钮
+              SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _isConnecting ? null : _simulateLogin,
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    backgroundColor: Colors.green[600],
+                  ),
+                  child: const Text('模拟登录', style: TextStyle(fontSize: 16)),
                 ),
               ),
               const SizedBox(height: 12),

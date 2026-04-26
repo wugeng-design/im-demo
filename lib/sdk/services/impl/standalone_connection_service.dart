@@ -1083,6 +1083,22 @@ class StandaloneConnectionService implements ImConnectionService {
 
   /// 获取好友列表
   Future<List<RosterItem>> getRoster() async {
+    // 模拟登录模式，返回模拟好友
+    if (_isSimulatedLogin) {
+      print('[Connection] 模拟登录模式：返回模拟好友列表');
+      final domain = _savedConfig?.domain ?? 'localhost';
+      return [
+        RosterItem(jid: 'alice@$domain', nick: 'Alice', subscription: 'both'),
+        RosterItem(jid: 'bob@$domain', nick: 'Bob', subscription: 'both'),
+        RosterItem(jid: 'charlie@$domain', nick: 'Charlie', subscription: 'both'),
+        RosterItem(jid: 'david@$domain', nick: 'David', subscription: 'both'),
+        RosterItem(jid: 'emma@$domain', nick: 'Emma', subscription: 'both'),
+        RosterItem(jid: 'frank@$domain', nick: 'Frank', subscription: 'both'),
+        RosterItem(jid: 'grace@$domain', nick: 'Grace', subscription: 'both'),
+        RosterItem(jid: 'henry@$domain', nick: 'Henry', subscription: 'both'),
+      ];
+    }
+
     if (_ejabberdApi == null || _currentJid == null) {
       return [];
     }
@@ -1157,6 +1173,23 @@ class StandaloneConnectionService implements ImConnectionService {
 
   /// 获取用户在线状态
   Future<List<UserPresence>> getUsersPresence(List<String> users) async {
+    // 模拟登录模式，返回模拟在线状态
+    if (_isSimulatedLogin) {
+      print('[Connection] 模拟登录模式：返回模拟在线状态');
+      // 随机设置一些用户在线
+      final mockPresence = <UserPresence>[];
+      final onlineUsers = {'alice', 'bob', 'charlie', 'emma'}; // 部分在线
+      for (final jid in users) {
+        final username = jid.split('@').first.toLowerCase();
+        mockPresence.add(UserPresence(
+          jid: jid,
+          online: onlineUsers.contains(username),
+          show: onlineUsers.contains(username) ? 'online' : null,
+        ));
+      }
+      return mockPresence;
+    }
+
     if (_ejabberdApi == null) return [];
     return await _ejabberdApi!.getUsersPresence(users);
   }

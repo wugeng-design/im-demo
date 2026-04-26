@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'pages/login_page.dart';
+import 'pages/home_page.dart';
 import 'sdk/logging/logging.dart';
 
 void main() async {
@@ -30,7 +30,7 @@ class ImSdkDemoApp extends StatelessWidget {
           elevation: 0,
         ),
       ),
-      home: const LoginPage(),
+      home: const HomePage(),
     );
   }
 }

@@ -173,30 +173,9 @@ class ConversationListPage extends ConsumerWidget {
   }
 
   Widget _buildNotConnectedView(BuildContext context, WidgetRef ref) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.cloud_off, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            '未连接到服务器',
-            style: TextStyle(color: Colors.grey[600], fontSize: 16),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-              );
-            },
-            icon: const Icon(Icons.login),
-            label: const Text('去登录'),
-          ),
-        ],
-      ),
-    );
+    // 直接显示会话列表，即使未连接到服务器
+    final conversations = ref.watch(conversationsProvider);
+    return _buildConversationList(context, ref, conversations);
   }
 
   void _showNewChatDialog(BuildContext context, WidgetRef ref) {

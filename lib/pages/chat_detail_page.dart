@@ -12,11 +12,13 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 import '../providers/im_provider.dart';
+import '../providers/call_provider.dart';
 import '../sdk/models/message.dart';
 import '../sdk/models/media.dart';
 import '../sdk/services/voice_recorder_service.dart';
 import '../sdk/services/speech_recognition_service.dart';
 import '../sdk/services/tencent_asr_service.dart';
+import '../sdk/services/call_service.dart';
 import '../theme/im_design_tokens.dart';
 import '../widgets/message_bubbles/message_bubbles.dart';
 import '../widgets/input/input.dart';
@@ -27,6 +29,7 @@ import 'message_search_page.dart';
 import 'media/image_preview_page.dart';
 import 'media/video_player_page.dart';
 import 'location_viewer_page.dart';
+import 'call_page.dart';
 
 /// 聊天详情页面
 class ChatDetailPage extends ConsumerStatefulWidget {
@@ -1038,6 +1041,56 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
     }
   }
 
+  /// 开始语音通话
+  Future<void> _startVoiceCall() async {
+    final callNotifier = ref.read(callNotifierProvider.notifier);
+    final callId = await callNotifier.startCall(
+      peerId: widget.conversationId,
+      peerName: widget.conversationName,
+      callType: CallType.voice,
+    );
+
+    if (callId != null && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CallPage(
+            callId: callId,
+            peerId: widget.conversationId,
+            peerName: widget.conversationName,
+            callType: CallType.voice,
+            callRole: CallRole.caller,
+          ),
+        ),
+      );
+    }
+  }
+
+  /// 开始视频通话
+  Future<void> _startVideoCall() async {
+    final callNotifier = ref.read(callNotifierProvider.notifier);
+    final callId = await callNotifier.startCall(
+      peerId: widget.conversationId,
+      peerName: widget.conversationName,
+      callType: CallType.video,
+    );
+
+    if (callId != null && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CallPage(
+            callId: callId,
+            peerId: widget.conversationId,
+            peerName: widget.conversationName,
+            callType: CallType.video,
+            callRole: CallRole.caller,
+          ),
+        ),
+      );
+    }
+  }
+
   /// 获取消息预览文本
   String _getMessagePreview(Message message) {
     switch (message.messageType) {
@@ -1237,6 +1290,16 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
       backgroundColor: colors.surface,
       elevation: 0.5,
       actions: [
+        // 语音通话按钮
+        IconButton(
+          icon: const Icon(Icons.phone),
+          onPressed: () => _startVoiceCall(),
+        ),
+        // 视频通话按钮
+        IconButton(
+          icon: const Icon(Icons.videocam),
+          onPressed: () => _startVideoCall(),
+        ),
         IconButton(
           icon: const Icon(Icons.more_vert),
           onPressed: () => _showChatSettings(context),

@@ -1270,6 +1270,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onVoiceRecordingComplete: _onVoiceRecordingComplete,
               onLocationSelected: _onLocationSelected,
               mentionableMembers: widget.isGroup ? _mentionableMembers : null,
+              onVoiceCallSelected: _startVoiceCall,
+              onVideoCallSelected: _startVideoCall,
             ),
           ]
           // 普通输入区域
@@ -1286,6 +1288,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onVoiceRecordingComplete: _onVoiceRecordingComplete,
               onLocationSelected: _onLocationSelected,
               mentionableMembers: widget.isGroup ? _mentionableMembers : null,
+              onVoiceCallSelected: _startVoiceCall,
+              onVideoCallSelected: _startVideoCall,
             )
           else
             _buildDisconnectedBar(colors),

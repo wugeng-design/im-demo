@@ -1044,6 +1044,17 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
   /// 开始语音通话
   Future<void> _startVoiceCall() async {
     final callNotifier = ref.read(callNotifierProvider.notifier);
+    final callState = ref.read(callNotifierProvider);
+
+    if (!callState.isInitialized) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在初始化通话服务...')),
+      );
+      await callNotifier.initialize(
+        appId: 'YOUR_AGORA_APP_ID',
+      );
+    }
+
     final callId = await callNotifier.startCall(
       peerId: widget.conversationId,
       peerName: widget.conversationName,
@@ -1063,12 +1074,29 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           ),
         ),
       );
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('通话启动失败: ${callState.error ?? "未知错误"}')),
+        );
+      }
     }
   }
 
   /// 开始视频通话
   Future<void> _startVideoCall() async {
     final callNotifier = ref.read(callNotifierProvider.notifier);
+    final callState = ref.read(callNotifierProvider);
+
+    if (!callState.isInitialized) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在初始化通话服务...')),
+      );
+      await callNotifier.initialize(
+        appId: 'YOUR_AGORA_APP_ID',
+      );
+    }
+
     final callId = await callNotifier.startCall(
       peerId: widget.conversationId,
       peerName: widget.conversationName,
@@ -1088,6 +1116,12 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
           ),
         ),
       );
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('通话启动失败: ${callState.error ?? "未知错误"}')),
+        );
+      }
     }
   }
 
@@ -1236,6 +1270,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onVoiceRecordingComplete: _onVoiceRecordingComplete,
               onLocationSelected: _onLocationSelected,
               mentionableMembers: widget.isGroup ? _mentionableMembers : null,
+              onVoiceCallSelected: _startVoiceCall,
+              onVideoCallSelected: _startVideoCall,
             ),
           ]
           // 普通输入区域
@@ -1252,6 +1288,8 @@ class _ChatDetailPageState extends ConsumerState<ChatDetailPage> {
               onVoiceRecordingComplete: _onVoiceRecordingComplete,
               onLocationSelected: _onLocationSelected,
               mentionableMembers: widget.isGroup ? _mentionableMembers : null,
+              onVoiceCallSelected: _startVoiceCall,
+              onVideoCallSelected: _startVideoCall,
             )
           else
             _buildDisconnectedBar(colors),
